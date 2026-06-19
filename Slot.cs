@@ -13,7 +13,7 @@ namespace PedalDrumMatrix
 
         float _amount, _amountTarget;
         float _p1, _p1Target;
-        bool  _mode;
+        float _mode, _modeTarget;
         float _smoothCoef;
 
         int _xfadeRemain, _xfadeLen = 1;
@@ -36,7 +36,7 @@ namespace PedalDrumMatrix
         {
             _amountTarget = amountRaw / 127f;
             _p1Target     = charRaw   / 127f;
-            _mode         = mode;
+            _modeTarget   = mode ? 1f : 0f;
 
             var t = (FxType)typeRaw;
             if (t != _active)
@@ -52,6 +52,7 @@ namespace PedalDrumMatrix
         {
             _amount = _amountTarget + (_amount - _amountTarget) * _smoothCoef;
             _p1     = _p1Target     + (_p1     - _p1Target)     * _smoothCoef;
+            _mode   = _modeTarget   + (_mode   - _modeTarget)   * _smoothCoef;
 
             if (_xfadeRemain > 0)
             {
