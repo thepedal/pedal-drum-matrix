@@ -184,5 +184,69 @@ namespace PedalDrumMatrix
 
             return true;
         }
+
+        // ── Value labelling (DescribeValue) ─────────────────────────────────
+        // Called only on cursor hover (UI thread, never the audio thread), so it
+        // can be as descriptive as we like. Char/Mode read the slot's current
+        // Type, so the readout reflects whichever effect is loaded — e.g. a
+        // slot's Char shows "Q 2.0" under Filter but "Feedback 47%" under Delay,
+        // and its Mode shows "Lowpass" / "Ping-pong" accordingly. Returning null
+        // falls back to ValueDescriptions (Type, Limiter, Auto Gain).
+        static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+        static string Pct(int v) => ((int)MathF.Round(v * 100f / 127f)).ToString(Inv) + "%";
+
+        int SlotTypeOf(int slot) => slot switch
+        {
+            1 => Slot1Type, 2 => Slot2Type, 3 => Slot3Type,
+            4 => Slot4Type, 5 => Slot5Type, 6 => Slot6Type, _ => 0
+        };
+
+        public string DescribeValue(IParameter param, int value)
+        {
+            string n = param?.Name ?? "";
+            if (n.StartsWith("Slot") && n.Length > 5 && char.IsDigit(n[4]))
+            {
+                FxType t = (FxType)SlotTypeOf(n[4] - '0');
+                if (n.EndsWith("Amount")) return Pct(value);
+                if (n.EndsWith("Char"))   return CharLabel(t, value);
+                if (n.EndsWith("Mode"))   return ModeLabel(t, value != 0);
+            }
+            return null;   // Type / Limiter / Auto Gain → ValueDescriptions
+        }
+
+        static string CharLabel(FxType t, int v)
+        {
+            float p = v / 127f;
+            switch (t)
+            {
+                case FxType.Bitcrush: return "Crush\u2194Rate " + Pct(v);
+                case FxType.Drive:    return "Bias " + ((p - 0.5f) * 0.8f).ToString("+0.00;-0.00;0.00", Inv);
+                case FxType.Filter:   return "Q " + (0.5f * MathF.Pow(16f, p)).ToString("0.0", Inv);
+                case FxType.RingMod:  return "Tune " + ((p - 0.5f) * 2f).ToString("+0.00;-0.00;0.00", Inv) + " oct";
+                case FxType.Comb:     return "Damp " + Pct(v);
+                case FxType.Stutter:  return "Repeats " + (2 + (int)MathF.Round(p * 6f)).ToString(Inv);
+                case FxType.Delay:    return "Feedback " + ((int)MathF.Round(p * 95f)).ToString(Inv) + "%";
+                case FxType.Reverb:   return "Damping " + Pct(v);
+                case FxType.Gate:     return "Duty " + ((int)MathF.Round((0.05f + p * 0.9f) * 100f)).ToString(Inv) + "%";
+                default:              return "\u2014";
+            }
+        }
+
+        static string ModeLabel(FxType t, bool on)
+        {
+            switch (t)
+            {
+                case FxType.Bitcrush: return on ? "Anti-alias"   : "Raw";
+                case FxType.Drive:    return on ? "Hard clip"    : "Soft";
+                case FxType.Filter:   return on ? "Highpass"     : "Lowpass";
+                case FxType.RingMod:  return on ? "AM"           : "Ring mod";
+                case FxType.Comb:     return on ? "Neg feedback" : "Pos feedback";
+                case FxType.Stutter:  return on ? "Reverse"      : "Forward";
+                case FxType.Delay:    return on ? "Ping-pong"    : "Mono";
+                case FxType.Reverb:   return on ? "Bright"       : "Normal";
+                case FxType.Gate:     return on ? "Triplet"      : "Straight";
+                default:              return "\u2014";
+            }
+        }
     }
 }

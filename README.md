@@ -51,7 +51,7 @@ Signal flow is serial: slot 1 → 2 → 3 → 4 → 5 → 6 → out.
 
 ## Status
 
-v0.7 — adds an Auto Gain leveler (peak-targeting) to pair with the limiter. **All ten slot types are implemented**: None,
+v1.1 — DescribeValue labels each control's value with its real per-effect function. **All ten slot types are implemented**: None,
 Bitcrush, Drive, Filter, RingMod, Comb, Stutter, Delay, Reverb, Gate. Each of
 the six slots selects independently, so any slot can hold any effect (and the
 same effect can sit in more than one slot — each slot owns its own instances).
@@ -92,6 +92,16 @@ Comb/movement → pedal-chorus · bipolar-param offset → pedal-comp §2.
 2. Fill effects in order of value for e-drums: Drive, Filter, RingMod, then the
    time-based ones (Delay, Reverb) which exercise the tail logic.
 3. Consider a GUI later to expose per-effect detail params + visual rack.
+
+
+## Value labelling
+
+Hovering a control shows its real current function via `DescribeValue`, read
+live from the slot's Type. A slot's **Char** reads e.g. `Q 2.0` under Filter,
+`Feedback 47%` under Delay, `Repeats 5` under Stutter; its **Mode** reads
+`Lowpass`/`Highpass`, `Ping-pong`/`Mono`, etc. Amount reads as a percentage.
+The static control names stay generic (the per-knob labels are a GUI job); the
+value readout carries the meaning.
 
 ## Sample scale
 
