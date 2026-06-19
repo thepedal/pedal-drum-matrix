@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Build §1.2 — the six mandatory properties for every managed machine.
+         DebugType/DebugSymbols/GenerateDependencyFile satisfy the project
+         deploy rule (ReBuzz only needs the .dll). -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <NoWarn>MSB3277</NoWarn>
+
+    <!-- Build §2 — .NET suffix is mandatory (routes the DLL to the managed
+         loader); the filename becomes the browser display name. -->
+    <AssemblyName>Pedal Drum Matrix.NET</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- Build §1.1 / §6.1 — reference only BuzzGUI.Interfaces.dll (it carries
+       both the Buzz.MachineInterface and BuzzGUI.Interfaces namespaces).
+       Private=false: it's provided by ReBuzz, don't copy it locally.
+       Adjust the HintPath if ReBuzz isn't at C:\Program Files\ReBuzz. -->
+  <ItemGroup>
+    <Reference Include="BuzzGUI.Interfaces">
+      <HintPath>C:\Program Files\ReBuzz\BuzzGUI.Interfaces.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Build §1.3 — deploy the freshly-built .dll to ReBuzz's effects folder.
+       $(TargetPath) is the .dll only; ContinueOnError survives a locked DLL
+       when ReBuzz is open during a rebuild. -->
+  <Target Name="DeployToReBuzz" AfterTargets="Build">
+    <Message Importance="high" Text="Deploying $(TargetPath) -> C:\Program Files\ReBuzz\Gear\Effects\" />
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFolder="C:\Program Files\ReBuzz\Gear\Effects\"
+          ContinueOnError="true" />
+  </Target>
+
+</Project>
