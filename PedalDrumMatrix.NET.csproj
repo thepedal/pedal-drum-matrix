@@ -38,6 +38,11 @@
     <Copy SourceFiles="$(TargetPath)"
           DestinationFolder="C:\Program Files\ReBuzz\Gear\Effects\"
           ContinueOnError="true" />
+    <!-- Preset bank: name = machine name + .prs.xml so ReBuzz auto-loads it
+         (Build §3.1). Quoted source handles the spaces in the filename. -->
+    <Copy SourceFiles="$(ProjectDir)Pedal Drum Matrix.prs.xml"
+          DestinationFolder="C:\Program Files\ReBuzz\Gear\Effects\"
+          ContinueOnError="true" />
   </Target>
 
 </Project>

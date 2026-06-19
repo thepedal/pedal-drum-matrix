@@ -32,11 +32,12 @@ namespace PedalDrumMatrix
         }
 
         // Called once per Work block, before the sample loop.
-        public void SetParams(int typeRaw, int amountRaw, int charRaw, bool mode)
+        public void SetParams(int typeRaw, int amountRaw, int charRaw, bool mode, int key, int scale)
         {
             _amountTarget = amountRaw / 127f;
             _p1Target     = charRaw   / 127f;
             _modeTarget   = mode ? 1f : 0f;
+            _fx[(int)_active].SetMusicalContext(key, scale);
 
             var t = (FxType)typeRaw;
             if (t != _active)
@@ -48,11 +49,15 @@ namespace PedalDrumMatrix
             }
         }
 
-        public void Process(ref float l, ref float r)
+        public void Process(ref float l, ref float r, float charMod)
         {
             _amount = _amountTarget + (_amount - _amountTarget) * _smoothCoef;
             _p1     = _p1Target     + (_p1     - _p1Target)     * _smoothCoef;
             _mode   = _modeTarget   + (_mode   - _modeTarget)   * _smoothCoef;
+
+            // modulated Char (envelope + LFO offset from the machine), clamped
+            float p1e = _p1 + charMod;
+            if (p1e < 0f) p1e = 0f; else if (p1e > 1f) p1e = 1f;
 
             if (_xfadeRemain > 0)
             {
@@ -61,8 +66,8 @@ namespace PedalDrumMatrix
                 float gO = MathF.Cos(t * (MathF.PI * 0.5f));
 
                 float oL = l, oR = r, nL = l, nR = r;
-                _fx[(int)_previous].Process(ref oL, ref oR, _amount, _p1, _mode);
-                _fx[(int)_active  ].Process(ref nL, ref nR, _amount, _p1, _mode);
+                _fx[(int)_previous].Process(ref oL, ref oR, _amount, p1e, _mode);
+                _fx[(int)_active  ].Process(ref nL, ref nR, _amount, p1e, _mode);
 
                 l = oL * gO + nL * gN;
                 r = oR * gO + nR * gN;
@@ -72,7 +77,7 @@ namespace PedalDrumMatrix
             }
             else
             {
-                _fx[(int)_active].Process(ref l, ref r, _amount, _p1, _mode);
+                _fx[(int)_active].Process(ref l, ref r, _amount, p1e, _mode);
             }
         }
 

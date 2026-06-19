@@ -51,7 +51,7 @@ Signal flow is serial: slot 1 → 2 → 3 → 4 → 5 → 6 → out.
 
 ## Status
 
-v1.2 — Mode switches crossfade between their two modes (no click on toggle). **All ten slot types are implemented**: None,
+v1.3 — signature modulation set: feedback loop, envelope follower, tempo-synced LFO, tuned resonator, scene morph.
 Bitcrush, Drive, Filter, RingMod, Comb, Stutter, Delay, Reverb, Gate. Each of
 the six slots selects independently, so any slot can hold any effect (and the
 same effect can sit in more than one slot — each slot owns its own instances).
@@ -93,6 +93,108 @@ Comb/movement → pedal-chorus · bipolar-param offset → pedal-comp §2.
    time-based ones (Delay, Reverb) which exercise the tail logic.
 3. Consider a GUI later to expose per-effect detail params + visual rack.
 
+
+## Preset bank (30 presets)
+
+Ships as `Pedal Drum Matrix.prs.xml` alongside the DLL in `Gear\Effects`;
+ReBuzz auto-loads it (right-click the machine → presets). Covers single-effect
+showcases (each of the ten effects), tuned-resonator melodics (Pentatonic Arp,
+Random Melody, Chord Stack, tuned bells/marimba), modulation patches (Vowel
+Wobble, Siren Ring, Snap Comb, Swell Echo), feedback patches (Dub Chamber,
+Resonant Drone, Howl Wash) and full signature racks (Industrial Kit, Melodic
+Machine, Evolving Texture). Presets set parameters only; the morph target is a
+separate live layer on top.
+
+## Scene morph (v1.3)
+
+A Morph knob blends the whole machine from the live sound toward a stored
+target snapshot — the performance capstone.
+
+- **Scene A is always the live parameters**, so the knobs and presets always
+  drive the sound. There is no separate A to store.
+- **Store** — captures the current settings as the morph target on an Off→On
+  toggle.
+- **Morph** — blends live→target. Continuous params (amounts, chars, depths,
+  feedback, tone, release) interpolate; discrete params (slot Type, Mode, LFO
+  wave/rate, Key, Scale) switch at the midpoint, smoothed by the existing
+  click-free Type and Mode crossfades.
+- At Morph 0 you hear the live/preset sound exactly; loading a preset changes
+  the sound at any Morph position (it updates the live A endpoint). The target
+  persists with the song via MachineState, keyed by param name so future param
+  additions never corrupt saved songs.
+
+Map Morph to a BCR encoder to sweep the whole texture from your current sound
+toward a stored extreme with one hand.
+
+## Tuned resonator (v1.3)
+
+A new **Resonator** slot type: a tuned comb resonator (Karplus-style) excited by
+the input, so percussive hits ring at musical pitches — drums become melodic.
+
+- Two global params, **Key** (root) and **Scale** (Major, Minor, Maj/Min Pent,
+  Dorian, Phrygian, Blues, Whole Tone), set the tuning.
+- A resonator slot's **Char** selects a degree of that scale (snapped to pitch
+  across 3 octaves); the value readout shows the actual note (e.g. E3). **Mode**
+  sets short (mallet) vs long (bell) decay. **Amount** is wet mix.
+- Because it's a normal slot, the LFO and envelope route to its Char like any
+  other — so the **LFO can sequence its pitch through the scale** (arpeggios /
+  melodies locked to tempo) and the **envelope can punch notes on hits**. Stack
+  several resonator slots for chords.
+
+An in-loop `tanh` keeps it self-limiting; pitch verified accurate to the scale.
+
+## Tempo-synced LFO (v1.3)
+
+A tempo-locked LFO as a second modulation source, routed into the slots like the
+envelope. Params (all mappable):
+
+- **LFO rate** — cycle length in ticks (1 → 64), so it tracks song tempo.
+- **LFO wave** — Sine, Triangle, Saw, Square, Steps (fixed 8-step pattern), or
+  Random (sample-and-hold, new value each cycle).
+- **Slot N LFO depth** — bipolar (64 = none); routes the LFO to that slot's Char.
+
+Each slot's Char modulation is the sum of envelope and LFO contributions
+(env·envDepth + lfo·lfoDepth), computed in the machine and applied on top of the
+smoothed Char. The slot itself is source-agnostic — it just receives one Char
+offset — so further mod sources can be added without touching it. Output is
+bipolar -1..+1; Steps and Random give sequencer-like rhythmic motion.
+
+## Envelope / transient follower (v1.3)
+
+An envelope follower tracks the dry input — the actual drum hits, before effects
+and feedback — and uses it as a modulation source so the rack responds to each
+hit. Params (all mappable):
+
+- **Envelope release** — how long each hit's modulation lasts (20 ms → 2 s).
+  Short = snappy per-hit blips; long = sustained swells.
+- **Slot N env depth** — bipolar (64 = none); routes the envelope to that slot's
+  Char. So a hit can open a Filter, jump a RingMod's pitch, swell a Reverb's
+  damping, etc. Negative depth inverts (a hit closes instead of opens).
+- **Envelope → feedback** — routes the envelope to the feedback amount, so hits
+  bloom the feedback loop and settle as the envelope decays.
+
+Detector: instant attack, release per the param; output scaled so typical drums
+reach strong modulation, clamped to 0..1. Per-slot Char modulation is applied on
+top of the (smoothed) Char setting and re-clamped to range.
+
+## Global feedback loop (v1.3)
+
+A portion of the rack output is delayed, tone-shaped and softly saturated, then
+fed back into the rack input — so drum transients excite the whole rack and it
+rings, drones and evolves on its own. Three global params (all mappable):
+
+- **Feedback** — amount returned (0 = off). Scaled so the full knob tops out
+  around 0.2; musical regeneration across the range without runaway.
+- **Feedback time** — loop length, 1 ms → 500 ms. Short = resonant / pitched
+  (comb-like); long = rhythmic regeneration.
+- **Feedback tone** — lowpass cutoff in the loop, 200 Hz → 12 kHz (dark → bright).
+
+Stability: an in-loop `tanh` makes it self-limiting (it sings rather than runs
+away) and a DC blocker keeps it from drifting; the output limiter is the final
+net. The loop is tapped post-slots / pre-limiter, so it carries the full
+character of whatever effects are in the rack, and injected ahead of slot 1.
+Its energy is included in the tail/sleep check, so a sustained drone keeps the
+machine awake (pull Feedback down to let it decay).
 
 ## Value labelling
 

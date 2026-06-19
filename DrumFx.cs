@@ -5,7 +5,7 @@ namespace PedalDrumMatrix
     // Fixed-order palette. ORDER IS A PRESET CONTRACT (Build §3.3): append only.
     public enum FxType
     {
-        None = 0, Bitcrush, Drive, Filter, RingMod, Comb, Stutter, Delay, Reverb, Gate
+        None = 0, Bitcrush, Drive, Filter, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator
     }
 
     // One effect occupying a slot. Stereo, per-sample.
@@ -20,6 +20,8 @@ namespace PedalDrumMatrix
         void Reset();
         void Process(ref float l, ref float r, float amount, float p1, float mode);
         bool IsRinging { get; }
+        // Only the tuned Resonator uses this; default no-op for every other fx.
+        void SetMusicalContext(int key, int scale) { }
     }
 
     public static class FxFactory
@@ -35,6 +37,7 @@ namespace PedalDrumMatrix
             FxType.Delay    => new DelayFx(),
             FxType.Reverb   => new ReverbFx(),
             FxType.Gate     => new GateFx(),
+            FxType.Resonator => new ResonatorFx(),
             _ => new NoneFx()
         };
     }
@@ -122,6 +125,107 @@ namespace PedalDrumMatrix
             float coef = desired > _gain ? _rise : _fall;
             _gain = desired + (_gain - desired) * coef;
             l *= _gain; r *= _gain;
+        }
+    }
+
+    // Global feedback loop: a portion of the rack output is delayed, tone-shaped
+    // and softly saturated, then fed back into the rack input. The in-loop tanh
+    // makes it self-limiting (it sings rather than runs away) and a DC blocker
+    // keeps it stable. Short loop times ring/pitch (comb-like); longer ones
+    // regenerate rhythmically. Tap() before the slots, Write() after them.
+    public sealed class GlobalFeedback
+    {
+        float[] _bL, _bR; int _w, _n, _d;
+        float _sr = 44100f, _amount, _aLP;
+        float _dcxL, _dcyL, _lpL, _dcxR, _dcyR, _lpR;
+        const float DcR = 0.999f;
+        Tail _tail;
+
+        public void Prepare(float sr, float spt)
+        {
+            _sr = sr > 0 ? sr : 44100f;
+            _n = Math.Max(8, (int)(1.0f * _sr));        // up to 1 s loop
+            _bL = new float[_n]; _bR = new float[_n];
+            _tail.Prepare(_sr);
+            SetParams(0, 64, 64);
+            Reset();
+        }
+        public void Reset()
+        {
+            Array.Clear(_bL, 0, _n); Array.Clear(_bR, 0, _n); _w = 0;
+            _dcxL = _dcyL = _lpL = _dcxR = _dcyR = _lpR = 0f;
+            _tail.Reset();
+        }
+        public void SetParams(int amt, int time, int tone)
+        {
+            _amount = (amt / 127f) * 0.2f;   // full knob ≈ 0.2 (was 1.0 — too hot)
+            float ms = 1f * MathF.Pow(500f, time / 127f);          // 1 → 500 ms
+            int d = (int)(ms * 0.001f * _sr);
+            _d = Math.Min(_n - 1, Math.Max(1, d));
+            float cutoff = 200f * MathF.Pow(60f, tone / 127f);     // 200 Hz → 12 kHz
+            _aLP = 1f - MathF.Exp(-2f * MathF.PI * cutoff / _sr);
+        }
+        void FilterChan(ref float dcx, ref float dcy, ref float lp, ref float x)
+        {
+            float hp = x - dcx + DcR * dcy; dcx = x; dcy = hp;     // DC blocker
+            lp += _aLP * (hp - lp);                                // tone lowpass
+            x = lp;
+        }
+        public void Tap(out float fbL, out float fbR, float extraAmount)
+        {
+            float amt = _amount + extraAmount;
+            if (amt > 0.5f) amt = 0.5f;                 // safety clamp
+            if (amt <= 0f) { fbL = fbR = 0f; return; }
+            int rp = _w - _d; if (rp < 0) rp += _n;
+            float yL = _bL[rp], yR = _bR[rp];
+            FilterChan(ref _dcxL, ref _dcyL, ref _lpL, ref yL);
+            FilterChan(ref _dcxR, ref _dcyR, ref _lpR, ref yR);
+            yL = MathF.Tanh(yL * 1.5f); yR = MathF.Tanh(yR * 1.5f); // self-limiting
+            fbL = yL * amt; fbR = yR * amt;
+        }
+        public void Write(float l, float r)
+        {
+            _bL[_w] = Dsp.Ftz(l); _bR[_w] = Dsp.Ftz(r);
+            _w++; if (_w >= _n) _w = 0;
+            _tail.Feed(l, r);
+        }
+        public bool IsRinging => _amount > 0f && _tail.Ringing;
+    }
+
+    // Tempo-synced LFO modulation source. Rate is a cycle length in ticks
+    // (rows), so it tracks tempo. Output is bipolar -1..+1. Steps is a fixed
+    // 8-step pattern; Random is sample-and-hold, new value each cycle.
+    public sealed class Lfo
+    {
+        float _phase, _inc, _hold;
+        int _wave; uint _rng = 0x1234567u;
+        static readonly float[] StepPat = { 0f, 0.6f, -0.4f, 1f, -0.7f, 0.3f, -1f, 0.5f };
+        public void SetRate(int ticks, float samplesPerTick)
+        {
+            float period = MathF.Max(1f, ticks * samplesPerTick);
+            _inc = 1f / period;
+        }
+        public void SetWave(int w) => _wave = w;
+        public void Reset() { _phase = 0f; _hold = 0f; }
+        public float Next()
+        {
+            float p = _phase;
+            _phase += _inc;
+            if (_phase >= 1f)
+            {
+                _phase -= 1f;
+                _rng = _rng * 1664525u + 1013904223u;
+                _hold = ((_rng >> 9) & 0xFFFF) / 32768f - 1f;   // new S&H value
+            }
+            switch (_wave)
+            {
+                case 0:  return MathF.Sin(2f * MathF.PI * p);     // sine
+                case 1:  return 1f - 4f * MathF.Abs(p - 0.5f);    // triangle
+                case 2:  return 2f * p - 1f;                      // saw
+                case 3:  return p < 0.5f ? 1f : -1f;              // square
+                case 4:  return StepPat[(int)(p * 8f) & 7];       // steps
+                default: return _hold;                           // random S&H
+            }
         }
     }
 
@@ -465,5 +569,79 @@ namespace PedalDrumMatrix
             l *= g; r *= g;
         }
         public bool IsRinging => false;
+    }
+
+    // ── Resonator ─ char: pitch (snapped to Key/Scale) · mode: short→long decay
+    // A tuned comb resonator (Karplus-style) excited by the input, so percussive
+    // hits ring at musical pitches — drums become melodic. Char selects a scale
+    // degree; modulate it with the LFO/envelope to play patterns in the key.
+    // The in-loop tanh keeps it self-limiting. Rings.
+    public sealed class ResonatorFx : IDrumFx
+    {
+        static readonly int[][] Scales =
+        {
+            new[]{0,2,4,5,7,9,11},   // major
+            new[]{0,2,3,5,7,8,10},   // minor
+            new[]{0,2,4,7,9},        // major pentatonic
+            new[]{0,3,5,7,10},       // minor pentatonic
+            new[]{0,2,3,5,7,9,10},   // dorian
+            new[]{0,1,3,5,7,8,10},   // phrygian
+            new[]{0,3,5,6,7,10},     // blues
+            new[]{0,2,4,6,8,10},     // whole tone
+        };
+        float[] _bL, _bR; int _n, _wL, _wR;
+        float _sr = 44100f, _dsL, _dsR;
+        int _key, _scale; Tail _tail;
+
+        public void SetMusicalContext(int key, int scale) { _key = key; _scale = scale; }
+
+        public static float CharToFreq(int key, int scale, float p1)
+        {
+            int[] sc = Scales[scale % Scales.Length];
+            int degrees = sc.Length * 3;                  // 3 octaves of the scale
+            int d = (int)(p1 * (degrees - 1) + 0.5f);
+            if (d < 0) d = 0; else if (d >= degrees) d = degrees - 1;
+            int semitone = (d / sc.Length) * 12 + sc[d % sc.Length];
+            int note = 36 + key + semitone;               // base C2 + key
+            return 440f * MathF.Pow(2f, (note - 69) / 12f);
+        }
+
+        public void Prepare(float sr, float spt)
+        {
+            _sr = sr > 0 ? sr : 44100f;
+            _n = Math.Max(8, (int)(_sr / 20f));           // down to 20 Hz
+            _bL = new float[_n]; _bR = new float[_n];
+            _tail.Prepare(_sr); Reset();
+        }
+        public void Reset()
+        {
+            Array.Clear(_bL, 0, _n); Array.Clear(_bR, 0, _n);
+            _wL = _wR = 0; _dsL = _dsR = 0f; _tail.Reset();
+        }
+        public void Process(ref float l, ref float r, float amount, float p1, float mode)
+        {
+            if (amount <= 0f) { _tail.Reset(); return; }
+            float ds = _sr / CharToFreq(_key, _scale, p1);
+            if (ds < 2f) ds = 2f; else if (ds > _n - 2) ds = _n - 2;
+            float fb = 0.980f + mode * 0.017f;            // short → long decay
+            const float damp = 0.3f;
+
+            float rp = _wL - ds; if (rp < 0) rp += _n;
+            int i0 = (int)rp; float fr = rp - i0; int i1 = i0 + 1; if (i1 >= _n) i1 -= _n;
+            float dL = _bL[i0] + (_bL[i1] - _bL[i0]) * fr;
+            _dsL = dL + (_dsL - dL) * damp;
+            _bL[_wL] = Dsp.Ftz(MathF.Tanh(l + fb * _dsL)); _wL++; if (_wL >= _n) _wL = 0;
+
+            rp = _wR - ds; if (rp < 0) rp += _n;
+            i0 = (int)rp; fr = rp - i0; i1 = i0 + 1; if (i1 >= _n) i1 -= _n;
+            float dR = _bR[i0] + (_bR[i1] - _bR[i0]) * fr;
+            _dsR = dR + (_dsR - dR) * damp;
+            _bR[_wR] = Dsp.Ftz(MathF.Tanh(r + fb * _dsR)); _wR++; if (_wR >= _n) _wR = 0;
+
+            l = (1f - amount) * l + amount * dL;
+            r = (1f - amount) * r + amount * dR;
+            _tail.Feed(amount * dL, amount * dR);
+        }
+        public bool IsRinging => _tail.Ringing;
     }
 }
