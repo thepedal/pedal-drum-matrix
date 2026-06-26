@@ -37,6 +37,7 @@ namespace PedalDrumMatrix
         // switch at the midpoint). The target persists via MachineState, keyed by
         // param name so future param additions never corrupt saved songs.
         PropertyInfo[] _sp;                 // scene params (all but Morph/Store), name-sorted
+        Func<int>[] _getters;               // compiled getters (avoid per-block reflection)
         Dictionary<string, int> _spIdx;     // name → index
         bool[] _spDiscrete;
         int[] _scene, _eff, _live;
@@ -64,13 +65,16 @@ namespace PedalDrumMatrix
                               || nm == "LfoWave" || nm == "LfoRate" || nm == "Key" || nm == "Scale";
             }
             _scene = new int[n]; _eff = new int[n]; _live = new int[n];
+            _getters = new Func<int>[n];
+            for (int i = 0; i < n; i++)
+                _getters[i] = (Func<int>)_sp[i].GetGetMethod().CreateDelegate(typeof(Func<int>), this);
         }
 
         int E(string name) => _eff[_spIdx[name]];
 
         void ComputeEffective(float mf)
         {
-            for (int i = 0; i < _sp.Length; i++) _live[i] = (int)_sp[i].GetValue(this);
+            for (int i = 0; i < _sp.Length; i++) _live[i] = _getters[i]();
 
             bool st = Store != 0;
             if (st && !_prevStore) { Array.Copy(_live, _scene, _live.Length); _hasScene = true; }
@@ -381,6 +385,7 @@ namespace PedalDrumMatrix
                 // envelope follows the dry input (instant attack, param release)
                 float a = MathF.Max(MathF.Abs(inL), MathF.Abs(inR));
                 _env = a > _env ? a : a + (_env - a) * _envRelCoef;
+                if (_env < 1e-15f) _env = 0f;   // keep the follower out of denormals
                 float envMod = _env * EnvSense; if (envMod > 1f) envMod = 1f;
 
                 _feedback.Tap(out float fbL, out float fbR, envMod * _fbEnvDepth);

@@ -52,6 +52,7 @@ namespace PedalDrumMatrix
         {
             float m = MathF.Abs(a) + MathF.Abs(b);
             _level = MathF.Max(_level * _decay, m);
+            if (_level < 1e-8f) _level = 0f;   // never let it decay into denormals
         }
         public bool Ringing => _level > 1e-4f;
     }
@@ -61,6 +62,20 @@ namespace PedalDrumMatrix
         // Flush-to-zero: keeps decaying feedback states out of the subnormal
         // range, where some CPUs slow down ~10× and cause dropout spikes.
         public static float Ftz(float v) => (v > -1e-15f && v < 1e-15f) ? 0f : v;
+
+        // Fast tanh — a higher-order rational (Padé) approximation. Max error
+        // ~1e-4 over the useful range, monotonic, saturates to ±1. Used in the
+        // per-sample signal path (Drive, Resonator, feedback) where a smooth
+        // bounded nonlinearity is wanted. Several × cheaper than MathF.Tanh.
+        public static float TanhFast(float x)
+        {
+            if (x < -4f) return -1f;
+            if (x >  4f) return  1f;
+            float x2 = x * x;
+            float num = x * (135135f + x2 * (17325f + x2 * (378f + x2)));
+            float den = 135135f + x2 * (62370f + x2 * (3150f + x2 * 28f));
+            return num / den;
+        }
     }
 
     // Zero-latency stereo-linked peak limiter + cubic soft-clip ceiling.
@@ -116,6 +131,8 @@ namespace PedalDrumMatrix
             float a = MathF.Max(MathF.Abs(l), MathF.Abs(r));
             _fast = a > _fast ? a : a + (_fast - a) * _fastRel;
             _slow = a > _slow ? a : a + (_slow - a) * _slowRel;
+            if (_fast < 1e-15f) _fast = 0f;
+            if (_slow < 1e-15f) _slow = 0f;
 
             float desired = TargetPk / MathF.Max(_slow, 1e-6f);
             if (desired > MaxGain) desired = MaxGain;
@@ -167,8 +184,8 @@ namespace PedalDrumMatrix
         }
         void FilterChan(ref float dcx, ref float dcy, ref float lp, ref float x)
         {
-            float hp = x - dcx + DcR * dcy; dcx = x; dcy = hp;     // DC blocker
-            lp += _aLP * (hp - lp);                                // tone lowpass
+            float hp = x - dcx + DcR * dcy; dcx = Dsp.Ftz(x); dcy = Dsp.Ftz(hp);  // DC blocker
+            lp += _aLP * (hp - lp); lp = Dsp.Ftz(lp);                             // tone lowpass
             x = lp;
         }
         public void Tap(out float fbL, out float fbR, float extraAmount)
@@ -180,7 +197,7 @@ namespace PedalDrumMatrix
             float yL = _bL[rp], yR = _bR[rp];
             FilterChan(ref _dcxL, ref _dcyL, ref _lpL, ref yL);
             FilterChan(ref _dcxR, ref _dcyR, ref _lpR, ref yR);
-            yL = MathF.Tanh(yL * 1.5f); yR = MathF.Tanh(yR * 1.5f); // self-limiting
+            yL = Dsp.TanhFast(yL * 1.5f); yR = Dsp.TanhFast(yR * 1.5f); // self-limiting
             fbL = yL * amt; fbR = yR * amt;
         }
         public void Write(float l, float r)
@@ -242,21 +259,27 @@ namespace PedalDrumMatrix
     public sealed class BitcrushFx : IDrumFx
     {
         float _holdL, _holdR, _phase, _lpL, _lpR;
+        int _cc; float _levels = 256f;
         public void Prepare(float sr, float spt) { Reset(); }
-        public void Reset() { _holdL = _holdR = 0f; _phase = 1f; _lpL = _lpR = 0f; }
+        public void Reset() { _holdL = _holdR = 0f; _phase = 1f; _lpL = _lpR = 0f; _cc = 0; _levels = 256f; }
         public void Process(ref float l, ref float r, float amount, float p1, float mode)
         {
             if (amount <= 0f) return;
             float rateAmt = amount * (0.5f + 0.5f * p1);
-            float bitAmt  = amount * (0.5f + 0.5f * (1f - p1));
             float step = 1f - rateAmt * 0.975f; if (step < 0.025f) step = 0.025f;
+            if (_cc == 0)                                   // control-rate: bit depth
+            {
+                float bitAmt = amount * (0.5f + 0.5f * (1f - p1));
+                _levels = MathF.Pow(2f, 16f - bitAmt * 13f);
+                _cc = 16;
+            }
+            _cc--;
             _phase += step;
             if (_phase >= 1f) { _phase -= 1f; _holdL = l; _holdR = r; }
-            float levels = MathF.Pow(2f, 16f - bitAmt * 13f);
-            float ql = MathF.Round(_holdL * levels) / levels;
-            float qr = MathF.Round(_holdR * levels) / levels;
+            float ql = MathF.Round(_holdL * _levels) / _levels;
+            float qr = MathF.Round(_holdR * _levels) / _levels;
             const float a = 0.5f;                         // gentle post lowpass, always updated
-            _lpL += a * (ql - _lpL); _lpR += a * (qr - _lpR);
+            _lpL = Dsp.Ftz(_lpL + a * (ql - _lpL)); _lpR = Dsp.Ftz(_lpR + a * (qr - _lpR));
             l = ql + (_lpL - ql) * mode;                  // crossfade raw → filtered
             r = qr + (_lpR - qr) * mode;
         }
@@ -266,22 +289,28 @@ namespace PedalDrumMatrix
     // ── Drive ─ char: bias/asymmetry · mode: soft → hard clip ───────────────
     public sealed class DriveFx : IDrumFx
     {
-        public void Prepare(float sr, float spt) { }
-        public void Reset() { }
+        int _cc; float _pre = 1f, _makeup = 1f, _bias = 0f, _dcS = 0f, _dcH = 0f;
+        public void Prepare(float sr, float spt) { Reset(); }
+        public void Reset() { _cc = 0; _pre = 1f; _makeup = 1f; _bias = _dcS = _dcH = 0f; }
         static float Clip(float x) => x < -1f ? -1f : (x > 1f ? 1f : x);
         public void Process(ref float l, ref float r, float amount, float p1, float mode)
         {
             if (amount <= 0f) return;
-            float pre = 1f + amount * 23f;
-            float makeup = 1f / MathF.Sqrt(pre);
-            float bias = (p1 - 0.5f) * 0.8f;
-            float dcS = MathF.Tanh(pre * bias),       dcH = Clip(pre * bias);
-            float ylS = MathF.Tanh(pre * (l + bias)), ylH = Clip(pre * (l + bias));
-            float yrS = MathF.Tanh(pre * (r + bias)), yrH = Clip(pre * (r + bias));
-            float dc = dcS + (dcH - dcS) * mode;
+            if (_cc == 0)                                   // control-rate: gain/bias/DC
+            {
+                _pre = 1f + amount * 23f;
+                _makeup = 1f / MathF.Sqrt(_pre);
+                _bias = (p1 - 0.5f) * 0.8f;
+                _dcS = Dsp.TanhFast(_pre * _bias); _dcH = Clip(_pre * _bias);
+                _cc = 16;
+            }
+            _cc--;
+            float dc = _dcS + (_dcH - _dcS) * mode;
+            float ylS = Dsp.TanhFast(_pre * (l + _bias)), ylH = Clip(_pre * (l + _bias));
+            float yrS = Dsp.TanhFast(_pre * (r + _bias)), yrH = Clip(_pre * (r + _bias));
             float yl = ylS + (ylH - ylS) * mode;
             float yr = yrS + (yrH - yrS) * mode;
-            l = (yl - dc) * makeup; r = (yr - dc) * makeup;
+            l = (yl - dc) * _makeup; r = (yr - dc) * _makeup;
         }
         public bool IsRinging => false;
     }
@@ -290,29 +319,35 @@ namespace PedalDrumMatrix
     public sealed class FilterFx : IDrumFx
     {
         float _sr = 44100f, _ic1L, _ic2L, _ic1R, _ic2R;
+        int _cc; float _a1, _a2, _a3, _k = 2f;
         public void Prepare(float sr, float spt) { _sr = sr > 0 ? sr : 44100f; Reset(); }
-        public void Reset() { _ic1L = _ic2L = _ic1R = _ic2R = 0f; }
+        public void Reset() { _ic1L = _ic2L = _ic1R = _ic2R = 0f; _cc = 0; }
         public void Process(ref float l, ref float r, float amount, float p1, float mode)
         {
             if (amount <= 0f) return;
-            float fc = 18000f * MathF.Pow(150f / 18000f, amount);
-            float q  = 0.5f * MathF.Pow(16f, p1);          // Q 0.5 → 8
-            float g  = MathF.Tan(MathF.PI * fc / _sr);
-            float k  = 1f / q;
-            float a1 = 1f / (1f + g * (g + k)), a2 = g * a1, a3 = g * a2;
+            if (_cc == 0)                                   // control-rate: cutoff/Q coeffs
+            {
+                float fc = 18000f * MathF.Pow(150f / 18000f, amount);
+                float q  = 0.5f * MathF.Pow(16f, p1);       // Q 0.5 → 8
+                float g  = MathF.Tan(MathF.PI * fc / _sr);
+                _k = 1f / q;
+                _a1 = 1f / (1f + g * (g + _k)); _a2 = g * _a1; _a3 = g * _a2;
+                _cc = 16;
+            }
+            _cc--;
 
             float v0 = l, v3 = v0 - _ic2L;
-            float v1 = a1 * _ic1L + a2 * v3;
-            float v2 = _ic2L + a2 * _ic1L + a3 * v3;
-            _ic1L = 2f * v1 - _ic1L; _ic2L = 2f * v2 - _ic2L;
-            float lpL = v2, hpL = v0 - k * v1 - v2;
+            float v1 = _a1 * _ic1L + _a2 * v3;
+            float v2 = _ic2L + _a2 * _ic1L + _a3 * v3;
+            _ic1L = Dsp.Ftz(2f * v1 - _ic1L); _ic2L = Dsp.Ftz(2f * v2 - _ic2L);
+            float lpL = v2, hpL = v0 - _k * v1 - v2;
             l = lpL + (hpL - lpL) * mode;                  // crossfade LP → HP
 
             v0 = r; v3 = v0 - _ic2R;
-            v1 = a1 * _ic1R + a2 * v3;
-            v2 = _ic2R + a2 * _ic1R + a3 * v3;
-            _ic1R = 2f * v1 - _ic1R; _ic2R = 2f * v2 - _ic2R;
-            float lpR = v2, hpR = v0 - k * v1 - v2;
+            v1 = _a1 * _ic1R + _a2 * v3;
+            v2 = _ic2R + _a2 * _ic1R + _a3 * v3;
+            _ic1R = Dsp.Ftz(2f * v1 - _ic1R); _ic2R = Dsp.Ftz(2f * v2 - _ic2R);
+            float lpR = v2, hpR = v0 - _k * v1 - v2;
             r = lpR + (hpR - lpR) * mode;
         }
         public bool IsRinging => false;
@@ -322,13 +357,20 @@ namespace PedalDrumMatrix
     public sealed class RingModFx : IDrumFx
     {
         float _sr = 44100f, _phase;
+        int _cc; float _inc = 0.1f;
         public void Prepare(float sr, float spt) { _sr = sr > 0 ? sr : 44100f; Reset(); }
-        public void Reset() { _phase = 0f; }
+        public void Reset() { _phase = 0f; _cc = 0; }
         public void Process(ref float l, ref float r, float amount, float p1, float mode)
         {
             if (amount <= 0f) return;
-            float f = 30f * MathF.Pow(100f, amount) * MathF.Pow(2f, (p1 - 0.5f) * 2f);
-            _phase += 2f * MathF.PI * f / _sr;
+            if (_cc == 0)                                   // control-rate: carrier freq
+            {
+                float f = 30f * MathF.Pow(100f, amount) * MathF.Pow(2f, (p1 - 0.5f) * 2f);
+                _inc = 2f * MathF.PI * f / _sr;
+                _cc = 16;
+            }
+            _cc--;
+            _phase += _inc;
             if (_phase > 2f * MathF.PI) _phase -= 2f * MathF.PI;
             float c = MathF.Sin(_phase);
             float carrier = c + ((0.5f + 0.5f * c) - c) * mode;   // RM → AM
@@ -511,7 +553,7 @@ namespace PedalDrumMatrix
         {
             float bo = buf[idx];
             float o = -input + bo;
-            buf[idx] = input + bo * ApFb;
+            buf[idx] = Dsp.Ftz(input + bo * ApFb);
             idx++; if (idx >= buf.Length) idx = 0;
             return o;
         }
@@ -534,8 +576,8 @@ namespace PedalDrumMatrix
             }
             // bright tilt = one-pole highpass on the wet; compute always, crossfade by mode
             const float a = 0.85f;
-            float hl = a * (_hpL + wl - _hxL); _hxL = wl; _hpL = hl;
-            float hr = a * (_hpR + wr - _hxR); _hxR = wr; _hpR = hr;
+            float hl = a * (_hpL + wl - _hxL); _hxL = Dsp.Ftz(wl); _hpL = Dsp.Ftz(hl);
+            float hr = a * (_hpR + wr - _hxR); _hxR = Dsp.Ftz(wr); _hpR = Dsp.Ftz(hr);
             float wlo = wl + (hl - wl) * mode;
             float wro = wr + (hr - wr) * mode;
             l = l + amount * wlo; r = r + amount * wro;
@@ -589,9 +631,9 @@ namespace PedalDrumMatrix
             new[]{0,3,5,6,7,10},     // blues
             new[]{0,2,4,6,8,10},     // whole tone
         };
-        float[] _bL, _bR; int _n, _wL, _wR;
+        float[] _bL, _bR; int _n, _w;
         float _sr = 44100f, _dsL, _dsR;
-        int _key, _scale; Tail _tail;
+        int _key, _scale, _cc, _di = 100; float _frac; Tail _tail;
 
         public void SetMusicalContext(int key, int scale) { _key = key; _scale = scale; }
 
@@ -616,27 +658,32 @@ namespace PedalDrumMatrix
         public void Reset()
         {
             Array.Clear(_bL, 0, _n); Array.Clear(_bR, 0, _n);
-            _wL = _wR = 0; _dsL = _dsR = 0f; _tail.Reset();
+            _w = 0; _dsL = _dsR = 0f; _cc = 0; _tail.Reset();
         }
         public void Process(ref float l, ref float r, float amount, float p1, float mode)
         {
             if (amount <= 0f) { _tail.Reset(); return; }
-            float ds = _sr / CharToFreq(_key, _scale, p1);
-            if (ds < 2f) ds = 2f; else if (ds > _n - 2) ds = _n - 2;
+            if (_cc == 0)                                   // control-rate: pitch → delay
+            {
+                float dsc = _sr / CharToFreq(_key, _scale, p1);
+                if (dsc < 2f) dsc = 2f; else if (dsc > _n - 2) dsc = _n - 2;
+                _di = (int)dsc; _frac = dsc - _di;          // integer + fractional delay
+                _cc = 16;
+            }
+            _cc--;
             float fb = 0.980f + mode * 0.017f;            // short → long decay
             const float damp = 0.3f;
 
-            float rp = _wL - ds; if (rp < 0) rp += _n;
-            int i0 = (int)rp; float fr = rp - i0; int i1 = i0 + 1; if (i1 >= _n) i1 -= _n;
-            float dL = _bL[i0] + (_bL[i1] - _bL[i0]) * fr;
-            _dsL = dL + (_dsL - dL) * damp;
-            _bL[_wL] = Dsp.Ftz(MathF.Tanh(l + fb * _dsL)); _wL++; if (_wL >= _n) _wL = 0;
-
-            rp = _wR - ds; if (rp < 0) rp += _n;
-            i0 = (int)rp; fr = rp - i0; i1 = i0 + 1; if (i1 >= _n) i1 -= _n;
-            float dR = _bR[i0] + (_bR[i1] - _bR[i0]) * fr;
-            _dsR = dR + (_dsR - dR) * damp;
-            _bR[_wR] = Dsp.Ftz(MathF.Tanh(r + fb * _dsR)); _wR++; if (_wR >= _n) _wR = 0;
+            // L/R share one write pointer and one delay, so read indices once
+            int i0 = _w - _di; if (i0 < 0) i0 += _n;
+            int i1 = i0 - 1;   if (i1 < 0) i1 += _n;
+            float dL = _bL[i0] + (_bL[i1] - _bL[i0]) * _frac;
+            float dR = _bR[i0] + (_bR[i1] - _bR[i0]) * _frac;
+            _dsL = Dsp.Ftz(dL + (_dsL - dL) * damp);
+            _dsR = Dsp.Ftz(dR + (_dsR - dR) * damp);
+            _bL[_w] = Dsp.Ftz(Dsp.TanhFast(l + fb * _dsL));
+            _bR[_w] = Dsp.Ftz(Dsp.TanhFast(r + fb * _dsR));
+            _w++; if (_w >= _n) _w = 0;
 
             l = (1f - amount) * l + amount * dL;
             r = (1f - amount) * r + amount * dR;

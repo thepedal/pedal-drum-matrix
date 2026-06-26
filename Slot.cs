@@ -54,6 +54,13 @@ namespace PedalDrumMatrix
             _amount = _amountTarget + (_amount - _amountTarget) * _smoothCoef;
             _p1     = _p1Target     + (_p1     - _p1Target)     * _smoothCoef;
             _mode   = _modeTarget   + (_mode   - _modeTarget)   * _smoothCoef;
+            // Snap to target once within an inaudible epsilon. Without this the
+            // smoothed value asymptotes toward (but never reaches) the target and
+            // slides into the denormal range — which both pins CPU at ~100× cost
+            // and keeps Amount a hair above 0 so the effect never early-returns.
+            if (MathF.Abs(_amount - _amountTarget) < 1e-6f) _amount = _amountTarget;
+            if (MathF.Abs(_p1     - _p1Target)     < 1e-6f) _p1     = _p1Target;
+            if (MathF.Abs(_mode   - _modeTarget)   < 1e-6f) _mode   = _modeTarget;
 
             // modulated Char (envelope + LFO offset from the machine), clamped
             float p1e = _p1 + charMod;
