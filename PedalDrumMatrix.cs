@@ -4,8 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Windows;          // MessageBox (About dialog)
 using Buzz.MachineInterface;   // IBuzzMachine, IBuzzMachineHost, MachineDecl, ParameterDecl, Sample, WorkModes
-using BuzzGUI.Interfaces;      // IMachine, IBuzz
+using BuzzGUI.Interfaces;      // IMachine, IBuzz, IMenuItem
+using BuzzGUI.Common;          // MenuItemVM, SimpleCommand
 
 namespace PedalDrumMatrix
 {
@@ -13,7 +15,32 @@ namespace PedalDrumMatrix
                  Author = "thepedal", MaxTracks = 0)]
     public class PedalDrumMatrixMachine : IBuzzMachine
     {
+        internal const string Version = "1.3.3";
         const int SLOTS = 6;
+
+        // Right-click "About..." entry in the Machine View context menu.
+        public IEnumerable<IMenuItem> Commands
+        {
+            get
+            {
+                yield return new MenuItemVM()
+                {
+                    Text = "About...",
+                    Command = new SimpleCommand()
+                    {
+                        CanExecuteDelegate = p => true,
+                        ExecuteDelegate = p => MessageBox.Show(
+                            $"Pedal Drum Matrix   v{Version}\n\n" +
+                            "Drum-centric 6-slot serial multi-effect: ten effects per slot, " +
+                            "global feedback loop, envelope + tempo-synced LFO modulation, " +
+                            "tuned resonator, and a live scene morph.\n\n" +
+                            "github.com/thepedal/pedal-drummatrix\n" +
+                            "MIT License",
+                            "About Pedal Drum Matrix")
+                    }
+                };
+            }
+        }
 
         readonly IBuzzMachineHost host;
         readonly Slot[] _slots = new Slot[SLOTS];

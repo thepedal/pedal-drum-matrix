@@ -51,7 +51,7 @@ Signal flow is serial: slot 1 → 2 → 3 → 4 → 5 → 6 → out.
 
 ## Status
 
-v1.3 — signature modulation set: feedback loop, envelope follower, tempo-synced LFO, tuned resonator, scene morph.
+v1.3.3 — signature modulation set (feedback, envelope, LFO, tuned resonator, scene morph) plus a right-click About window.
 Bitcrush, Drive, Filter, RingMod, Comb, Stutter, Delay, Reverb, Gate. Each of
 the six slots selects independently, so any slot can hold any effect (and the
 same effect can sit in more than one slot — each slot owns its own instances).

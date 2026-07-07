@@ -28,6 +28,12 @@
       <HintPath>C:\Program Files\ReBuzz\BuzzGUI.Interfaces.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- AboutWindow §1.1 — MenuItemVM + SimpleCommand for the right-click
+         About entry live in BuzzGUI.Common.dll (ships with ReBuzz). -->
+    <Reference Include="BuzzGUI.Common">
+      <HintPath>C:\Program Files\ReBuzz\BuzzGUI.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- Build §1.3 — deploy the freshly-built .dll to ReBuzz's effects folder.

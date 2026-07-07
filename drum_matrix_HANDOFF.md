@@ -55,9 +55,11 @@ Approx line counts: DrumFx ~647, PedalDrumMatrix ~503, Slot ~89.
 - **AssemblyName is `Pedal Drum Matrix.NET`** — the `.NET` suffix is mandatory
   (routes the DLL to the managed loader); the filename becomes the browser
   display name.
-- **Reference only `BuzzGUI.Interfaces.dll`** (HintPath
+- **Reference `BuzzGUI.Interfaces.dll`** (HintPath
   `C:\Program Files\ReBuzz\BuzzGUI.Interfaces.dll`, `Private=false`). It carries
-  both the Buzz.MachineInterface and BuzzGUI.Interfaces namespaces.
+  both the Buzz.MachineInterface and BuzzGUI.Interfaces namespaces. Also
+  reference **`BuzzGUI.Common.dll`** (same folder, `Private=false`) for the
+  About window's `MenuItemVM` / `SimpleCommand` (added in v1.3.3).
 - **Post-build deploy** copies the DLL and the preset bank to
   `C:\Program Files\ReBuzz\Gear\Effects\` (ContinueOnError true so a locked DLL
   during a live rebuild does not fail the build). The preset copy uses a quoted
@@ -448,6 +450,10 @@ both-modes compute cheap), and fast `Sin` for the RingMod/LFO oscillators.
   resonator damping, bitcrush/filter states). Symptom was CPU climbing to ~40%
   after a few seconds and sticking, made worse (not better) by turning Amounts
   down — the classic denormal signature.
+- **v1.3.3** — right-click About window (AboutWindow pattern): a `Commands`
+  property yields a MenuItemVM that pops a MessageBox with name/version/URL/
+  license. Adds a `BuzzGUI.Common.dll` reference and a `Version` const
+  (single source of truth, currently 1.3.3).
 
 ---
 
