@@ -1,4 +1,4 @@
-# Pedal Drum Matrix — Handoff (v1.3.4)
+# Pedal Drum Matrix — Handoff (v1.3.5)
 
 A drum-centric multi-effect machine for ReBuzz, tailored to a Behringer BCR2000
 (6 dual-function rotary+push encoders). It replaces a former rig of ~15 machines
@@ -127,10 +127,10 @@ Char (the rotary character), and Mode (the switch). Meanings:
 
 - **Bitcrush** — Char: bits-vs-rate tilt. Mode: raw -> anti-alias filter.
 - **Drive** — Char: bias/asymmetry. Mode: soft (tanh) -> hard clip.
-- **Lowpass / Highpass** — two effect types sharing one TPT state-variable
-  filter (LP/HP fixed at construction). Char: resonance Q (0.5 to 8). Mode:
-  slope, 12 -> 24 dB/oct (a cascaded Butterworth second stage, slope-crossfaded).
-  Amount sweeps cutoff 18 kHz -> 150 Hz.
+- **Lowpass / Highpass** — two effect types sharing one 12 dB/oct TPT
+  state-variable filter (LP/HP fixed at construction). Amount blends dry ->
+  filtered (how much filter is applied); Char sets cutoff (150 Hz -> 18 kHz);
+  Mode selects one of two Q values (0.707 gentle / 6.0 resonant), crossfaded.
 - **RingMod** — Char: carrier fine tune (+/-1 oct). Mode: ring mod -> AM.
   Amount sets carrier 30 Hz to 3 kHz.
 - **Comb** — Char: feedback damping. Mode: +feedback -> -feedback (passes
@@ -470,6 +470,13 @@ both-modes compute cheap), and fast `Sin` for the RingMod/LFO oscillators.
   old lowpass instances are unchanged; old Filter highpass-mode instances become
   24 dB lowpass unless retyped to Highpass (the preset bank was migrated
   automatically).
+- **v1.3.5** — reworked the filter controls: Amount now blends dry -> filtered
+  (how much filter), Char sets cutoff (150 Hz -> 18 kHz), Mode selects one of two
+  Q values (gentle 0.707 / resonant 6.0). Dropped the 12/24 dB slope and the
+  cascaded second stage; single 12 dB/oct stage. This remaps all three filter
+  controls, so the preset bank was migrated (cutoff from the old amount, full
+  wet, Q from the old resonance) and existing songs with filter slots need their
+  filter controls reset.
 
 ---
 

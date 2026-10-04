@@ -1,6 +1,6 @@
 # Pedal Drum Matrix
 
-A drum-centric multi-effect for **ReBuzz** (v1.3.4), built around a Behringer
+A drum-centric multi-effect for **ReBuzz** (v1.3.5), built around a Behringer
 BCR2000. A separate Buzz 1503 port is maintained in its own repo.
 
 A single stereo-in / stereo-out drum-fx **rack**: six serial slots,
@@ -47,8 +47,8 @@ The Char + Mode pair per slot is designed for the BCR2000's six dual-function
 |---|---|---|
 | Bitcrush | bit-crush ↔ decimation tilt | anti-alias filter |
 | Drive | bias / asymmetry | hard clip vs soft |
-| Lowpass | resonance (Q) | 12 vs 24 dB/oct slope |
-| Highpass | resonance (Q) | 12 vs 24 dB/oct slope |
+| Lowpass | cutoff | Low vs High Q |
+| Highpass | cutoff | Low vs High Q |
 | RingMod | carrier fine tune (±1 oct) | ring-mod vs AM |
 | Comb | feedback damping | +/− feedback sign |
 | Stutter | repeats (2–8) | reverse slice |
@@ -86,8 +86,9 @@ same effect can sit in more than one slot — each slot owns its own instances).
 Effect notes:
 - Bitcrush — decimation + bit reduction. Tail-free.
 - Drive — tanh saturation with makeup gain. Tail-free.
-- Lowpass / Highpass — TPT state-variable, separate effect types; char = resonance
-  (Q 0.5-8), mode = slope (12 or 24 dB/oct), amount sweeps cutoff 18 kHz → 150 Hz.
+- Lowpass / Highpass — TPT state-variable, separate effect types; amount blends
+  dry → filtered (how much filter is applied), char sets cutoff (150 Hz → 18 kHz),
+  mode selects one of two Q values (gentle Butterworth vs resonant).
 - RingMod — sine carrier 30 Hz → 3 kHz, wet scales with amount. Tail-free.
 - Comb — short feedback resonator (metallic); amount raises pitch + feedback. Rings.
 - Delay — tempo-synced (≈6 ticks, from `host.MasterInfo.SamplesPerTick`),

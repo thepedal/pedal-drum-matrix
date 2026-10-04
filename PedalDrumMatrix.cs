@@ -15,7 +15,7 @@ namespace PedalDrumMatrix
                  Author = "thepedal", MaxTracks = 0)]
     public class PedalDrumMatrixMachine : IBuzzMachine
     {
-        internal const string Version = "1.3.4";
+        internal const string Version = "1.3.5";
         const int SLOTS = 6;
 
         // Right-click "About..." entry in the Machine View context menu.
@@ -519,7 +519,7 @@ namespace PedalDrumMatrix
                 case FxType.Bitcrush: return "Crush-Rate " + Pct(v);
                 case FxType.Drive:    return "Bias " + ((p - 0.5f) * 0.8f).ToString("+0.00;-0.00;0.00", Inv);
                 case FxType.Lowpass:
-                case FxType.Highpass: return "Q " + (0.5f * MathF.Pow(16f, p)).ToString("0.0", Inv);
+                case FxType.Highpass: return FormatHz(150f * MathF.Pow(120f, p));
                 case FxType.RingMod:  return "Tune " + ((p - 0.5f) * 2f).ToString("+0.00;-0.00;0.00", Inv) + " oct";
                 case FxType.Comb:     return "Damp " + Pct(v);
                 case FxType.Stutter:  return "Repeats " + (2 + (int)MathF.Round(p * 6f)).ToString(Inv);
@@ -537,7 +537,7 @@ namespace PedalDrumMatrix
                 case FxType.Bitcrush: return on ? "Anti-alias"   : "Raw";
                 case FxType.Drive:    return on ? "Hard clip"    : "Soft";
                 case FxType.Lowpass:
-                case FxType.Highpass: return on ? "24 dB/oct"    : "12 dB/oct";
+                case FxType.Highpass: return on ? "High Q"       : "Low Q";
                 case FxType.RingMod:  return on ? "AM"           : "Ring mod";
                 case FxType.Comb:     return on ? "Neg feedback" : "Pos feedback";
                 case FxType.Stutter:  return on ? "Reverse"      : "Forward";
