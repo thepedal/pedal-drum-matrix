@@ -1,4 +1,4 @@
-# Pedal Drum Matrix — Handoff (v1.3)
+# Pedal Drum Matrix — Handoff (v1.3.4)
 
 A drum-centric multi-effect machine for ReBuzz, tailored to a Behringer BCR2000
 (6 dual-function rotary+push encoders). It replaces a former rig of ~15 machines
@@ -7,9 +7,14 @@ serial rack, plus a modulation layer that makes it respond to the drums and
 resonate on its own. Author tag: thepedal.
 
 This doc is the cold-start reference. It reflects the machine as shipped at
-v1.3. Where it says `Core` / `Build` / `PedalComp` etc. it means the project
-ReBuzz_ManagedMachine_Notes_*.md files, which remain authoritative for ReBuzz
-API specifics.
+v1.3.4 on ReBuzz. Where it says `Core` / `Build` / `PedalComp` etc. it means the
+project ReBuzz_ManagedMachine_Notes_*.md files, which remain authoritative for
+ReBuzz API specifics.
+
+A separate Buzz 1503 (net48/x86) port is maintained in its own repo
+(pedal-drum-matrix-buzz-1503); its host-boundary adaptations (MathF shim,
+explicit SetMusicalContext, WM_READ I/O, ASCII strings, GPL licence) live with
+that port, not here.
 
 ---
 
@@ -26,7 +31,9 @@ All under the project folder; deployed file is the DLL plus the preset bank.
   tracker, `Dsp.Ftz`, `OutputLimiter`, `AutoGain`, `GlobalFeedback`, `Lfo`, and
   all effect classes including `ResonatorFx`.
 - `PedalDrumMatrix.NET.csproj` — build + deploy (see §3).
-- `Pedal Drum Matrix.prs.xml` — 30-preset bank (auto-loads; see §13).
+- `Pedal Drum Matrix.NET.prs.xml` — 30-preset bank (auto-loads; see §13).
+- `MathF.cs` — `MathF` shim for .NET Framework 4.8.
+- `LICENSE` — GNU General Public License v3.0.
 - `README.md` — user-facing feature notes.
 - `drum_matrix_HANDOFF.md` — this file.
 
@@ -46,27 +53,20 @@ Approx line counts: DrumFx ~647, PedalDrumMatrix ~503, Slot ~89.
 
 ## 3. Build and deploy
 
-- **Target framework net10.0-windows, UseWPF true.** All managed machines here
-  are .NET 10+.
-- **The six mandatory csproj properties** (Build 1.2): `DebugType=none`,
-  `DebugSymbols=false`, `GenerateDependencyFile=false` (ReBuzz needs only the
-  DLL), plus `TargetFramework`, `UseWPF`, and the `.NET` AssemblyName suffix.
-  `NoWarn=MSB3277`.
-- **AssemblyName is `Pedal Drum Matrix.NET`** — the `.NET` suffix is mandatory
-  (routes the DLL to the managed loader); the filename becomes the browser
-  display name.
-- **Reference `BuzzGUI.Interfaces.dll`** (HintPath
-  `C:\Program Files\ReBuzz\BuzzGUI.Interfaces.dll`, `Private=false`). It carries
-  both the Buzz.MachineInterface and BuzzGUI.Interfaces namespaces. Also
-  reference **`BuzzGUI.Common.dll`** (same folder, `Private=false`) for the
-  About window's `MenuItemVM` / `SimpleCommand` (added in v1.3.3).
-- **Post-build deploy** copies the DLL and the preset bank to
-  `C:\Program Files\ReBuzz\Gear\Effects\` (ContinueOnError true so a locked DLL
-  during a live rebuild does not fail the build). The preset copy uses a quoted
-  source path because the filename contains spaces.
-- No compiler is available in the dev container; validation is by brace-counting
-  and Python DSP simulation. The machine is compiled and run in real ReBuzz
-  between iterations, so the SDK boundary is effectively validated there.
+- **Target `net10.0-windows`, `UseWPF=true`** (MessageBox for the About box).
+- **Mandatory deployment properties:** `DebugType=none`, `DebugSymbols=false`,
+  `GenerateDependencyFile=false` (ReBuzz needs only the DLL). `NoWarn=MSB3277`.
+- **AssemblyName `Pedal Drum Matrix.NET`** — the `.NET` suffix routes the DLL to
+  the managed loader; the filename becomes the browser display name.
+- **References:** `BuzzGUI.Interfaces.dll` (carries Buzz.MachineInterface and
+  BuzzGUI.Interfaces) and `BuzzGUI.Common.dll` (MenuItemVM / SimpleCommand for
+  the About box), both from `$(ReBuzzDir)` with `Private=false`. `ReBuzzDir`
+  defaults to `C:\Program Files\ReBuzz`.
+- **Post-build deploy** copies the DLL and `$(AssemblyName).prs.xml` to
+  `$(ReBuzzDir)\Gear\Effects\` (ContinueOnError true survives a locked DLL when
+  ReBuzz is open during a rebuild).
+- Uses `System.MathF` directly (net10). A separate Buzz 1503 port swaps in a
+  MathF shim and net48 target; that lives in the port's repo, not here.
 
 ---
 
@@ -90,14 +90,14 @@ Per sample, in order:
 Parameters are pushed once per block via `PushParamsToSlots()`, which reads
 **morph-effective** values (see §11), not the live properties directly.
 
-WM_NOIO (input silent): the machine keeps rendering tails and sleeps (returns
+No input (WM_NOIO, or no WM_READ / null input): the machine keeps rendering tails and sleeps (returns
 false) only when nothing is ringing — `AnyTailRinging()` OR `_feedback.IsRinging`.
 
 ---
 
 ## 5. DSP conventions and the load-bearing invariants
 
-- **ReBuzz audio is the +/-32768 domain, not +/-1.0** (Core 38 / PedalComp 1).
+- **Buzz audio is the +/-32768 domain, not +/-1.0** (Core 38 / PedalComp 1).
   The machine normalises at input (multiply by 1/32768) and denormalises at
   output (multiply by 32768). All DSP runs in the normalised +/-1 section, so
   any absolute-threshold maths (tanh drive, soft-clip ceilings, denormal flush)
@@ -106,7 +106,7 @@ false) only when nothing is ringing — `AnyTailRinging()` OR `_feedback.IsRingi
   state (Comb, Delay, Reverb, Resonator, GlobalFeedback) to avoid the subnormal
   CPU stall.
 - **ValueDescriptions must be an inline array literal** in the attribute (no
-  static field reference) or ReBuzz will not read them.
+  static field reference) or the host will not read them.
 - **Parameter declaration order is the preset/song contract** (Build 3.3) —
   append only, never reorder or insert. New params go at the end.
 - **No audio-thread allocation.** Every effect instance is pre-built in the Slot
@@ -118,15 +118,19 @@ false) only when nothing is ringing — `AnyTailRinging()` OR `_feedback.IsRingi
 ## 6. Effect palette
 
 `FxType` enum (index = preset contract, append only):
-`None=0, Bitcrush, Drive, Filter, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator(=10)`.
+`None=0, Bitcrush, Drive, Lowpass, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator(=10), Highpass(=11)`.
+(Lowpass keeps value 3 — the former `Filter` — so old lowpass-mode instances are
+bit-identical; Highpass is appended at 11.)
 
 Per effect, the slot macros are Amount (wet/intensity, 0 = clean pass-through),
 Char (the rotary character), and Mode (the switch). Meanings:
 
 - **Bitcrush** — Char: bits-vs-rate tilt. Mode: raw -> anti-alias filter.
 - **Drive** — Char: bias/asymmetry. Mode: soft (tanh) -> hard clip.
-- **Filter** — Char: resonance Q (0.5 to 8). Mode: lowpass -> highpass. Amount
-  sweeps cutoff 18 kHz -> 150 Hz. TPT state-variable.
+- **Lowpass / Highpass** — two effect types sharing one TPT state-variable
+  filter (LP/HP fixed at construction). Char: resonance Q (0.5 to 8). Mode:
+  slope, 12 -> 24 dB/oct (a cascaded Butterworth second stage, slope-crossfaded).
+  Amount sweeps cutoff 18 kHz -> 150 Hz.
 - **RingMod** — Char: carrier fine tune (+/-1 oct). Mode: ring mod -> AM.
   Amount sets carrier 30 Hz to 3 kHz.
 - **Comb** — Char: feedback damping. Mode: +feedback -> -feedback (passes
@@ -225,7 +229,8 @@ accurate to within ~0.3 percent.
 
 The machine forwards Key/Scale to the active effect through
 `Slot.SetParams(..., key, scale)` -> `IDrumFx.SetMusicalContext(key, scale)`, a
-default-interface no-op overridden only by `ResonatorFx`.
+interface member that is an empty method in every effect except `ResonatorFx`
+(no default interface body on .NET Framework).
 
 ---
 
@@ -265,7 +270,7 @@ is ignored (start fresh). MachineState setter runs before the GUI on load.
 ## 12. Full parameter table
 
 49 params. Declaration order is the contract; the index column below is 0-based
-(as written in the preset XML). ReBuzz UI may show 1-based positions.
+(as written in the preset XML). The host UI may show 1-based positions.
 
 ```
 idx  name            range     def   meaning
@@ -332,12 +337,12 @@ named state per effect (`Lowpass`/`Highpass`, etc.).
 
 ## 13. Preset bank
 
-- Ships as `Pedal Drum Matrix.prs.xml` next to the DLL in `Gear\Effects`. Because
-  the filename equals the machine name plus `.prs.xml`, ReBuzz auto-loads it as
-  the active preset set (right-click the machine). UTF-8 **with BOM**.
+- Ships as `Pedal Drum Matrix.NET.prs.xml` next to the DLL in `Gear\Effects`. Because
+  the filename equals the DLL base name (`Pedal Drum Matrix.NET`) plus `.prs.xml`,
+  ReBuzz auto-loads it as the active preset set. UTF-8 **with BOM**.
 - Format: `PresetDictionary` -> `Item Key=name` -> `Preset Machine=Pedal Drum
   Matrix` -> `Parameters` with one `Parameter Name=.. Group=1 Index=.. Track=0
-  Value=..` per global, in declaration order. Index (0-based) is what ReBuzz
+  Value=..` per global, in declaration order. Index (0-based) is what the host
   binds on, so the bank must be regenerated if the param order ever changes.
 - 30 presets, each using **all six slots** (a full signal chain: saturation/
   lo-fi early, tone-shaping mid, delay/reverb tails; headline effect louder,
@@ -365,7 +370,9 @@ named state per effect (`Lowpass`/`Highpass`, etc.).
 - Tail-aware sleep: OR every slot IsRinging with feedback.IsRinging.
 - Feedback tapped post-slots / pre-limiter, injected pre-slot 0; in-loop tanh +
   DC blocker keep it stable; amount capped at ~0.2.
-- Resonator gets Key/Scale via SetMusicalContext (default no-op for other fx).
+- Resonator gets Key/Scale via SetMusicalContext (empty method in other fx).
+- Check the mode / null `input` before touching `input`; never read a
+  stale buffer.
 - Morph reads live params each block and drives the engine through `_eff[]`;
   scene A is always live (do not reintroduce a stored A — that was the bug).
 - MachineState is name-keyed and version-gated; bump the version on layout
@@ -392,6 +399,8 @@ named state per effect (`Lowpass`/`Highpass`, etc.).
 
 Measure with Pedal Profiler2 reading the **ENGINE** column (not SOLO/MARGINAL,
 which are dominated by ReBuzz's fixed ~5 ms per-chunk host overhead floor).
+(The separate Buzz 1503 port carries a higher fixed per-machine managed-call
+cost and somewhat higher DSP cost; that is tracked in the port's repo.)
 
 The v1.0 all-None reading was ~3 percent flat, but that predated the v1.3
 modulation features and the all-six-slots presets. Heavy six-slot chains
@@ -405,7 +414,7 @@ materially, so an optimisation pass was done (v1.3.1):
   16-sample granularity is inaudible; static settings are bit-identical, a moving
   knob lags by at most 16 samples.
 - **Fast tanh.** `Dsp.TanhFast` (a Padé rational, max error ~7e-4) replaces
-  `MathF.Tanh` in the per-sample signal path (Drive, Resonator, global feedback).
+  exact tanh in the per-sample signal path (Drive, Resonator, global feedback).
 - **Compiled morph getters.** `ComputeEffective` reads the live params through
   cached `Func<int>` delegates instead of `PropertyInfo.GetValue`, removing the
   per-block reflection cost.
@@ -454,8 +463,17 @@ both-modes compute cheap), and fast `Sin` for the RingMod/LFO oscillators.
   property yields a MenuItemVM that pops a MessageBox with name/version/URL/
   license. Adds a `BuzzGUI.Common.dll` reference and a `Version` const
   (single source of truth, currently 1.3.3).
+- **v1.3.4** — split the combined Filter into two effect types: `Lowpass`
+  (reuses enum value 3, the former Filter) and `Highpass` (new, value 11). Char
+  stays resonance; Mode now sets slope (12/24 dB/oct via a cascaded Butterworth
+  second stage). Lowpass at 12 dB is bit-identical to the old Filter lowpass, so
+  old lowpass instances are unchanged; old Filter highpass-mode instances become
+  24 dB lowpass unless retyped to Highpass (the preset bank was migrated
+  automatically).
 
 ---
+
+- A separate **Buzz 1503 port** (net48/x86) is maintained in its own repo.
 
 ## 17. Roadmap / declined
 

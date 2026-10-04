@@ -1,13 +1,39 @@
 # Pedal Drum Matrix
 
-A single stereo-in / stereo-out drum-fx **rack** for ReBuzz: six serial slots,
+A drum-centric multi-effect for **ReBuzz** (v1.3.4), built around a Behringer
+BCR2000. A separate Buzz 1503 port is maintained in its own repo.
+
+A single stereo-in / stereo-out drum-fx **rack**: six serial slots,
 each one a swappable effect. Aimed at serious textural transformation of drum
 sounds.
+
+## Build
+
+SDK-style project targeting `net10.0-windows`. Build from a prompt with ReBuzz
+closed:
+
+```
+dotnet build -c Release
+```
+
+ReBuzz is assumed at `C:\Program Files\ReBuzz`; override with
+`-p:ReBuzzDir="D:\path\to\ReBuzz"`. The build references `BuzzGUI.Interfaces.dll`
+and `BuzzGUI.Common.dll` from there (not copied) and deploys two files to
+`Gear\Effects`:
+
+- `Pedal Drum Matrix.NET.dll`
+- `Pedal Drum Matrix.NET.prs.xml` (the 30-preset bundle; paired with the DLL by
+  base name so ReBuzz auto-loads it)
+
+No `.pdb` or `.deps.json` is produced. Look for the `Deploying ...` line in the
+build output; the copy is non-fatal if ReBuzz has the DLL locked.
+
+A separate Buzz 1503 (net48/x86) port is maintained in its own repo.
 
 ## How it's controlled
 
 Per slot:
-- **Slot N Type** — picks the effect (None / Bitcrush / Drive / Filter / RingMod
+- **Slot N Type** — picks the effect (None / Bitcrush / Drive / Lowpass / Highpass / RingMod
   / Comb / Stutter / Delay / Reverb / Gate). Automatable and peer/MIDI mappable.
 - **Slot N Amount** — overall intensity / wet (amount 0 = clean).
 - **Slot N Char** — continuous 0–100 character control (effect-specific). Maps
@@ -21,7 +47,8 @@ The Char + Mode pair per slot is designed for the BCR2000's six dual-function
 |---|---|---|
 | Bitcrush | bit-crush ↔ decimation tilt | anti-alias filter |
 | Drive | bias / asymmetry | hard clip vs soft |
-| Filter | resonance (Q) | lowpass vs highpass |
+| Lowpass | resonance (Q) | 12 vs 24 dB/oct slope |
+| Highpass | resonance (Q) | 12 vs 24 dB/oct slope |
 | RingMod | carrier fine tune (±1 oct) | ring-mod vs AM |
 | Comb | feedback damping | +/− feedback sign |
 | Stutter | repeats (2–8) | reverse slice |
@@ -42,8 +69,8 @@ Signal flow is serial: slot 1 → 2 → 3 → 4 → 5 → 6 → out.
   slot's type at runtime is an index change, never an audio-thread allocation
   (no GC). Swaps run a 10 ms equal-power crossfade → click-free.
 - `IDrumFx` exposes `IsRinging`; the machine ORs it across all slots so a Reverb
-  or Delay in any slot keeps its tail after the drums stop (tail-aware
-  `WM_NOIO`, Core §33).
+  or Delay in any slot keeps its tail after the drums stop (tail-aware sleep:
+  input without the READ flag is treated as silence).
 - Amount is smoothed per sample (Core §32).
 - The `FxType` enum order is the preset contract (Build §3.3): **append only**;
   never reorder. The `ValueDescriptions` literal on each Slot Type param must
@@ -59,7 +86,8 @@ same effect can sit in more than one slot — each slot owns its own instances).
 Effect notes:
 - Bitcrush — decimation + bit reduction. Tail-free.
 - Drive — tanh saturation with makeup gain. Tail-free.
-- Filter — TPT state-variable LP; amount sweeps cutoff 18 kHz → 150 Hz. Tail-free.
+- Lowpass / Highpass — TPT state-variable, separate effect types; char = resonance
+  (Q 0.5-8), mode = slope (12 or 24 dB/oct), amount sweeps cutoff 18 kHz → 150 Hz.
 - RingMod — sine carrier 30 Hz → 3 kHz, wet scales with amount. Tail-free.
 - Comb — short feedback resonator (metallic); amount raises pitch + feedback. Rings.
 - Delay — tempo-synced (≈6 ticks, from `host.MasterInfo.SamplesPerTick`),
@@ -72,7 +100,7 @@ Effect notes:
   sets tail length + wet. Rings.
 
 Comb and Delay report `IsRinging` via a decaying-energy tracker so their tails
-survive `WM_NOIO` and the rack sleeps only once everything is quiet.
+survive the input going silent and the rack sleeps only once everything is quiet.
 
 ## DSP to lift from existing repos
 
@@ -81,14 +109,17 @@ Comb/movement → pedal-chorus · bipolar-param offset → pedal-comp §2.
 
 ## Files
 
-- `PedalDrumMatrix.NET.csproj` — Build §1.2 props, deploy to `Gear\Effects`.
-- `PedalDrumMatrix.cs` — machine, 6×(Type + Amount), serial Work.
+- `PedalDrumMatrix.NET.csproj` — net10.0-windows build, deploy to ReBuzz `Gear\Effects`.
+- `PedalDrumMatrix.cs` — machine: 49 params, serial Work, modulation, morph, MachineState.
 - `Slot.cs` — slot host, swap crossfade, amount smoothing, tail flag.
-- `DrumFx.cs` — `IDrumFx`, `FxType`, factory, `NoneFx`, `BitcrushFx`.
+- `DrumFx.cs` — `IDrumFx`, `FxType`, factory, all effects, limiter, auto gain, feedback, LFO.
+- `MathF.cs` — `MathF` shim for .NET Framework 4.8.
+- `Pedal Drum Matrix.NET.prs.xml` — 30-preset bundle.
+- `LICENSE` — GNU General Public License v3.0.
 
 ## Next steps
 
-1. Build against local ReBuzz; confirm it loads and Bitcrush sounds on a slot.
+1. Build against local ReBuzz; add a fresh instance and confirm audio + presets + About.
 2. Fill effects in order of value for e-drums: Drive, Filter, RingMod, then the
    time-based ones (Delay, Reverb) which exercise the tail logic.
 3. Consider a GUI later to expose per-effect detail params + visual rack.
@@ -96,8 +127,8 @@ Comb/movement → pedal-chorus · bipolar-param offset → pedal-comp §2.
 
 ## Preset bank (30 presets)
 
-Ships as `Pedal Drum Matrix.prs.xml` alongside the DLL in `Gear\Effects`;
-ReBuzz auto-loads it (right-click the machine → presets). Covers single-effect
+Ships as `Pedal Drum Matrix.NET.prs.xml` alongside the DLL in `Gear\Effects`;
+ReBuzz loads it automatically (the machine's preset menu). Covers single-effect
 showcases (each of the ten effects), tuned-resonator melodics (Pentatonic Arp,
 Random Melody, Chord Stack, tuned bells/marimba), modulation patches (Vowel
 Wobble, Siren Ring, Snap Comb, Swell Echo), feedback patches (Dub Chamber,
@@ -207,7 +238,7 @@ value readout carries the meaning.
 
 ## Sample scale
 
-ReBuzz audio is ±32768, not ±1.0 (Core §38 / PedalComp §1). The machine
+Buzz audio is ±32768, not ±1.0. The machine
 normalises to ±1.0 at the input, runs all DSP there, and denormalises (×32768)
 at the output. Without this the output limiter crushed full-scale drums to
 near-silence, Drive saturated everything to ±1, and Bitcrush's bit-reduction
@@ -224,5 +255,8 @@ Gate, Stutter) were unaffected.
   Decaying tails otherwise drift into subnormal floats, which spike CPU on
   some hardware and cause dropouts. `Dsp.Ftz` keeps them normal.
 - Building both in-machine (vs. external comp/limiter machines) avoids the
-  per-machine + per-connection host overhead that ReBuzz incurs per tick.
+  per-machine + per-connection host overhead each extra machine would add.
 
+## Licence
+
+GNU General Public License v3.0. See `LICENSE`.

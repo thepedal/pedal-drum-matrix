@@ -15,7 +15,7 @@ namespace PedalDrumMatrix
                  Author = "thepedal", MaxTracks = 0)]
     public class PedalDrumMatrixMachine : IBuzzMachine
     {
-        internal const string Version = "1.3.3";
+        internal const string Version = "1.3.4";
         const int SLOTS = 6;
 
         // Right-click "About..." entry in the Machine View context menu.
@@ -34,7 +34,7 @@ namespace PedalDrumMatrix
                             "Drum-centric 6-slot serial multi-effect: ten effects per slot, " +
                             "global feedback loop, envelope + tempo-synced LFO modulation, " +
                             "tuned resonator, and a live scene morph.\n\n" +
-                            "github.com/thepedal/pedal-drummatrix\n" +
+                            "github.com/thepedal/pedal-drum-matrix\n" +
                             "MIT License",
                             "About Pedal Drum Matrix")
                     }
@@ -69,6 +69,7 @@ namespace PedalDrumMatrix
         bool[] _spDiscrete;
         int[] _scene, _eff, _live;
         bool _hasScene, _prevStore;
+        bool _started;   // set by the first Work() (1503 notes 3.3)
         const uint StateMagic = 0x4D52_4450u;   // 'PDRM'
         const byte StateVer = 2;
 
@@ -176,46 +177,46 @@ namespace PedalDrumMatrix
         // inline per attribute (a static-field reference won't compile) and its
         // order must match the FxType enum.
 
-        [ParameterDecl(DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Filter","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator" },
-            Description = "Slot 1 — effect type")]
+        [ParameterDecl(MinValue = 0, MaxValue = 11, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass" },
+            Description = "Slot 1 - effect type")]
         public int Slot1Type { get; set; } = 0;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 1 — amount")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 1 - amount")]
         public int Slot1Amount { get; set; } = 0;
 
-        [ParameterDecl(DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Filter","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator" },
-            Description = "Slot 2 — effect type")]
+        [ParameterDecl(MinValue = 0, MaxValue = 11, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass" },
+            Description = "Slot 2 - effect type")]
         public int Slot2Type { get; set; } = 0;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 2 — amount")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 2 - amount")]
         public int Slot2Amount { get; set; } = 0;
 
-        [ParameterDecl(DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Filter","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator" },
-            Description = "Slot 3 — effect type")]
+        [ParameterDecl(MinValue = 0, MaxValue = 11, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass" },
+            Description = "Slot 3 - effect type")]
         public int Slot3Type { get; set; } = 0;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 3 — amount")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 3 - amount")]
         public int Slot3Amount { get; set; } = 0;
 
-        [ParameterDecl(DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Filter","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator" },
-            Description = "Slot 4 — effect type")]
+        [ParameterDecl(MinValue = 0, MaxValue = 11, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass" },
+            Description = "Slot 4 - effect type")]
         public int Slot4Type { get; set; } = 0;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 4 — amount")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 4 - amount")]
         public int Slot4Amount { get; set; } = 0;
 
-        [ParameterDecl(DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Filter","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator" },
-            Description = "Slot 5 — effect type")]
+        [ParameterDecl(MinValue = 0, MaxValue = 11, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass" },
+            Description = "Slot 5 - effect type")]
         public int Slot5Type { get; set; } = 0;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 5 — amount")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 5 - amount")]
         public int Slot5Amount { get; set; } = 0;
 
-        [ParameterDecl(DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Filter","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator" },
-            Description = "Slot 6 — effect type")]
+        [ParameterDecl(MinValue = 0, MaxValue = 11, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass" },
+            Description = "Slot 6 - effect type")]
         public int Slot6Type { get; set; } = 0;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 6 — amount")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 6 - amount")]
         public int Slot6Amount { get; set; } = 0;
 
         // ── Character controls (appended — Build §3.3) ───────────────────────
@@ -224,34 +225,34 @@ namespace PedalDrumMatrix
         // Appended after the original 12 params so existing songs keep their
         // Type/Amount values; they group at the bottom of the rack.
 
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 1 — char")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 1 - char")]
         public int Slot1Char { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 1 — mode")]
+        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 1 - mode")]
         public int Slot1Mode { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 2 — char")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 2 - char")]
         public int Slot2Char { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 2 — mode")]
+        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 2 - mode")]
         public int Slot2Mode { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 3 — char")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 3 - char")]
         public int Slot3Char { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 3 — mode")]
+        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 3 - mode")]
         public int Slot3Mode { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 4 — char")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 4 - char")]
         public int Slot4Char { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 4 — mode")]
+        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 4 - mode")]
         public int Slot4Mode { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 5 — char")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 5 - char")]
         public int Slot5Char { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 5 — mode")]
+        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 5 - mode")]
         public int Slot5Mode { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 6 — char")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 6 - char")]
         public int Slot6Char { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 6 — mode")]
+        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "Off", "On" }, Description = "Slot 6 - mode")]
         public int Slot6Mode { get; set; } = 0;
 
         // Output safety limiter (zero-latency peak limiter + soft-clip ceiling).
@@ -281,44 +282,44 @@ namespace PedalDrumMatrix
         // EnvToFb routes it to the feedback amount (hits bloom the loop). Appended.
         [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Envelope release")]
         public int EnvRelease { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Envelope → feedback")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Envelope to feedback")]
         public int EnvToFb { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 1 — env depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 1 - env depth")]
         public int Slot1EnvDepth { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 2 — env depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 2 - env depth")]
         public int Slot2EnvDepth { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 3 — env depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 3 - env depth")]
         public int Slot3EnvDepth { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 4 — env depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 4 - env depth")]
         public int Slot4EnvDepth { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 5 — env depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 5 - env depth")]
         public int Slot5EnvDepth { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 6 — env depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 6 - env depth")]
         public int Slot6EnvDepth { get; set; } = 64;
 
         // Tempo-synced LFO modulation source. Rate is a cycle length in ticks;
         // per-slot LfoDepth (bipolar, 64 = none) routes it to that slot's Char.
         [ParameterDecl(MinValue = 0, MaxValue = 11, DefValue = 7,
             ValueDescriptions = new[] { "1", "2", "3", "4", "6", "8", "12", "16", "24", "32", "48", "64" },
-            Description = "LFO rate (ticks/cycle)")]
+            Description = "LFO rate (ticks per cycle)")]
         public int LfoRate { get; set; } = 7;
         [ParameterDecl(MinValue = 0, MaxValue = 5, DefValue = 0,
             ValueDescriptions = new[] { "Sine", "Triangle", "Saw", "Square", "Steps", "Random" },
             Description = "LFO wave")]
         public int LfoWave { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 1 — LFO depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 1 - LFO depth")]
         public int Slot1LfoDepth { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 2 — LFO depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 2 - LFO depth")]
         public int Slot2LfoDepth { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 3 — LFO depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 3 - LFO depth")]
         public int Slot3LfoDepth { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 4 — LFO depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 4 - LFO depth")]
         public int Slot4LfoDepth { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 5 — LFO depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 5 - LFO depth")]
         public int Slot5LfoDepth { get; set; } = 64;
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 6 — LFO depth")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 64, Description = "Slot 6 - LFO depth")]
         public int Slot6LfoDepth { get; set; } = 64;
 
         // Musical tuning for any Resonator slots: Key (root) + Scale. A
@@ -335,9 +336,9 @@ namespace PedalDrumMatrix
         // Scene morph (excluded from the scene snapshot). Scene A is the live
         // params; Store snapshots the current settings as the morph target on
         // Off→On; Morph blends live→target.
-        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Morph (live → target)")]
+        [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Morph (live to target)")]
         public int Morph { get; set; } = 0;
-        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "...", "Store" }, Description = "Store morph target (Off→On)")]
+        [ParameterDecl(MinValue = 0, MaxValue = 1, DefValue = 0, ValueDescriptions = new[] { "...", "Store" }, Description = "Store morph target (Off to On)")]
         public int Store { get; set; } = 0;
 
         void PushParamsToSlots()
@@ -386,28 +387,42 @@ namespace PedalDrumMatrix
                 _feedback.Prepare(_sampleRate, spt);
             }
 
-            // WM_NOIO: input silent. Keep rendering tails (a Reverb/Delay in any
-            // slot is still ringing); sleep only once the whole rack is quiet.
-            if (mode == WorkModes.WM_NOIO)
-            {
-                if (!AnyTailRinging() && !_feedback.IsRinging) return false;
-                if (input == null)
-                    for (int i = 0; i < n; i++) { output[i].L = 0f; output[i].R = 0f; }
-            }
+            // Song load runs the parameter setters and the MachineState setter
+            // before the first Work() (1503 notes 3.3). Latch the saved Store
+            // state here so a song saved with Store On is not read as an
+            // Off-to-On edge, which would overwrite the restored morph target.
+            if (!_started) { _started = true; _prevStore = Store != 0; }
+
+            // Buzz 1503 (1503 notes 2.1): input is only valid when the READ flag
+            // is set. A muted upstream machine does NOT arrive as WM_NOIO; Work()
+            // is called without READ while `input` still holds the last block
+            // from before the mute. Reading it would loop that stale block
+            // through the rack (a constant buzz) and keep exciting the envelope
+            // follower and the feedback loop, so the machine would never sleep.
+            bool hasInput = (mode & WorkModes.WM_READ) != 0 && input != null;
+
+            // No input: keep rendering tails from silence (a Reverb/Delay/
+            // Resonator or the feedback loop may still be ringing); sleep only
+            // once the whole rack is quiet.
+            if (!hasInput && !AnyTailRinging() && !_feedback.IsRinging) return false;
+
+            // READ without WRITE: the host wants the input seen but no output.
+            if (hasInput && (mode & WorkModes.WM_WRITE) == 0) return false;
 
             EnsureReflect();
+
             ComputeEffective(Morph / 127f);
             PushParamsToSlots();
 
-            // ReBuzz audio is ±32768, not ±1.0 (Core §38 / PedalComp §1).
+            // Buzz audio is ±32768, not ±1.0 (1503 notes 2.3).
             // Normalise to ±1.0 for the DSP, denormalise on output — otherwise
             // any absolute-threshold stage (limiter, drive, soft-clip) is wildly
             // mis-scaled (the limiter crushes full-scale audio to silence).
             const float INV = 1f / 32768f, SCALE = 32768f;
             for (int i = 0; i < n; i++)
             {
-                float inL = (input != null ? input[i].L : output[i].L) * INV;
-                float inR = (input != null ? input[i].R : output[i].R) * INV;
+                float inL = hasInput ? input[i].L * INV : 0f;
+                float inR = hasInput ? input[i].R * INV : 0f;
 
                 // envelope follows the dry input (instant attack, param release)
                 float a = MathF.Max(MathF.Abs(inL), MathF.Abs(inR));
@@ -501,16 +516,17 @@ namespace PedalDrumMatrix
             float p = v / 127f;
             switch (t)
             {
-                case FxType.Bitcrush: return "Crush\u2194Rate " + Pct(v);
+                case FxType.Bitcrush: return "Crush-Rate " + Pct(v);
                 case FxType.Drive:    return "Bias " + ((p - 0.5f) * 0.8f).ToString("+0.00;-0.00;0.00", Inv);
-                case FxType.Filter:   return "Q " + (0.5f * MathF.Pow(16f, p)).ToString("0.0", Inv);
+                case FxType.Lowpass:
+                case FxType.Highpass: return "Q " + (0.5f * MathF.Pow(16f, p)).ToString("0.0", Inv);
                 case FxType.RingMod:  return "Tune " + ((p - 0.5f) * 2f).ToString("+0.00;-0.00;0.00", Inv) + " oct";
                 case FxType.Comb:     return "Damp " + Pct(v);
                 case FxType.Stutter:  return "Repeats " + (2 + (int)MathF.Round(p * 6f)).ToString(Inv);
                 case FxType.Delay:    return "Feedback " + ((int)MathF.Round(p * 95f)).ToString(Inv) + "%";
                 case FxType.Reverb:   return "Damping " + Pct(v);
                 case FxType.Gate:     return "Duty " + ((int)MathF.Round((0.05f + p * 0.9f) * 100f)).ToString(Inv) + "%";
-                default:              return "\u2014";
+                default:              return "-";
             }
         }
 
@@ -520,7 +536,8 @@ namespace PedalDrumMatrix
             {
                 case FxType.Bitcrush: return on ? "Anti-alias"   : "Raw";
                 case FxType.Drive:    return on ? "Hard clip"    : "Soft";
-                case FxType.Filter:   return on ? "Highpass"     : "Lowpass";
+                case FxType.Lowpass:
+                case FxType.Highpass: return on ? "24 dB/oct"    : "12 dB/oct";
                 case FxType.RingMod:  return on ? "AM"           : "Ring mod";
                 case FxType.Comb:     return on ? "Neg feedback" : "Pos feedback";
                 case FxType.Stutter:  return on ? "Reverse"      : "Forward";
@@ -528,7 +545,7 @@ namespace PedalDrumMatrix
                 case FxType.Reverb:   return on ? "Bright"       : "Normal";
                 case FxType.Gate:     return on ? "Triplet"      : "Straight";
                 case FxType.Resonator: return on ? "Long decay"  : "Short decay";
-                default:              return "\u2014";
+                default:              return "-";
             }
         }
     }

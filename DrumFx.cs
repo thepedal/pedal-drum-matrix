@@ -5,7 +5,7 @@ namespace PedalDrumMatrix
     // Fixed-order palette. ORDER IS A PRESET CONTRACT (Build §3.3): append only.
     public enum FxType
     {
-        None = 0, Bitcrush, Drive, Filter, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator
+        None = 0, Bitcrush, Drive, Lowpass, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator, Highpass
     }
 
     // One effect occupying a slot. Stereo, per-sample.
@@ -20,8 +20,10 @@ namespace PedalDrumMatrix
         void Reset();
         void Process(ref float l, ref float r, float amount, float p1, float mode);
         bool IsRinging { get; }
-        // Only the tuned Resonator uses this; default no-op for every other fx.
-        void SetMusicalContext(int key, int scale) { }
+        // Only the tuned Resonator uses this; every other fx implements it as an
+        // empty method. (No default interface body: .NET Framework 4.8 does not
+        // support default interface implementations.)
+        void SetMusicalContext(int key, int scale);
     }
 
     public static class FxFactory
@@ -30,7 +32,8 @@ namespace PedalDrumMatrix
         {
             FxType.Bitcrush => new BitcrushFx(),
             FxType.Drive    => new DriveFx(),
-            FxType.Filter   => new FilterFx(),
+            FxType.Lowpass  => new FilterFx(highpass: false),
+            FxType.Highpass => new FilterFx(highpass: true),
             FxType.RingMod  => new RingModFx(),
             FxType.Comb     => new CombFx(),
             FxType.Stutter  => new StutterFx(),
@@ -253,6 +256,7 @@ namespace PedalDrumMatrix
         public void Reset() { }
         public void Process(ref float l, ref float r, float amount, float p1, float mode) { }
         public bool IsRinging => false;
+        public void SetMusicalContext(int key, int scale) { }
     }
 
     // ── Bitcrush ─ char: bits↔rate tilt · mode: raw → anti-alias filter ─────
@@ -284,6 +288,7 @@ namespace PedalDrumMatrix
             r = qr + (_lpR - qr) * mode;
         }
         public bool IsRinging => false;
+        public void SetMusicalContext(int key, int scale) { }
     }
 
     // ── Drive ─ char: bias/asymmetry · mode: soft → hard clip ───────────────
@@ -313,15 +318,32 @@ namespace PedalDrumMatrix
             l = (yl - dc) * _makeup; r = (yr - dc) * _makeup;
         }
         public bool IsRinging => false;
+        public void SetMusicalContext(int key, int scale) { }
     }
 
     // ── Filter ─ char: resonance · mode: lowpass → highpass. amount = cutoff ─
+    // ── Lowpass / Highpass ─ char: resonance Q · mode: 12 → 24 dB slope ──────
+    // One TPT state-variable filter configured as LP or HP at construction.
+    // amount = cutoff, char = resonance (stage 1), mode morphs the slope by
+    // cascading a clean (Butterworth) second stage (12 dB → 24 dB/oct).
     public sealed class FilterFx : IDrumFx
     {
-        float _sr = 44100f, _ic1L, _ic2L, _ic1R, _ic2R;
-        int _cc; float _a1, _a2, _a3, _k = 2f;
+        readonly bool _hp;
+        float _sr = 44100f;
+        int _cc;
+        float _a1, _a2, _a3, _k = 2f;                       // stage 1 (resonant)
+        float _b1, _b2, _b3;                                // stage 2 (Butterworth)
+        float _i1L, _i2L, _i1R, _i2R;                       // stage 1 state
+        float _j1L, _j2L, _j1R, _j2R;                       // stage 2 state
+        const float K2 = 1.41421356f;                       // Butterworth Q
+
+        public FilterFx(bool highpass) { _hp = highpass; }
         public void Prepare(float sr, float spt) { _sr = sr > 0 ? sr : 44100f; Reset(); }
-        public void Reset() { _ic1L = _ic2L = _ic1R = _ic2R = 0f; _cc = 0; }
+        public void Reset()
+        {
+            _i1L = _i2L = _i1R = _i2R = 0f;
+            _j1L = _j2L = _j1R = _j2R = 0f; _cc = 0;
+        }
         public void Process(ref float l, ref float r, float amount, float p1, float mode)
         {
             if (amount <= 0f) return;
@@ -331,26 +353,34 @@ namespace PedalDrumMatrix
                 float q  = 0.5f * MathF.Pow(16f, p1);       // Q 0.5 → 8
                 float g  = MathF.Tan(MathF.PI * fc / _sr);
                 _k = 1f / q;
-                _a1 = 1f / (1f + g * (g + _k)); _a2 = g * _a1; _a3 = g * _a2;
+                _a1 = 1f / (1f + g * (g + _k));  _a2 = g * _a1; _a3 = g * _a2;
+                _b1 = 1f / (1f + g * (g + K2));   _b2 = g * _b1; _b3 = g * _b2;
                 _cc = 16;
             }
             _cc--;
+            l = Stage(l, ref _i1L, ref _i2L, ref _j1L, ref _j2L, mode);
+            r = Stage(r, ref _i1R, ref _i2R, ref _j1R, ref _j2R, mode);
+        }
+        float Stage(float x, ref float i1, ref float i2, ref float j1, ref float j2, float mode)
+        {
+            // stage 1 — resonant TPT SVF
+            float v3 = x - i2;
+            float v1 = _a1 * i1 + _a2 * v3;
+            float v2 = i2 + _a2 * i1 + _a3 * v3;
+            i1 = Dsp.Ftz(2f * v1 - i1); i2 = Dsp.Ftz(2f * v2 - i2);
+            float out1 = _hp ? (x - _k * v1 - v2) : v2;     // 12 dB/oct
 
-            float v0 = l, v3 = v0 - _ic2L;
-            float v1 = _a1 * _ic1L + _a2 * v3;
-            float v2 = _ic2L + _a2 * _ic1L + _a3 * v3;
-            _ic1L = Dsp.Ftz(2f * v1 - _ic1L); _ic2L = Dsp.Ftz(2f * v2 - _ic2L);
-            float lpL = v2, hpL = v0 - _k * v1 - v2;
-            l = lpL + (hpL - lpL) * mode;                  // crossfade LP → HP
+            // stage 2 — Butterworth, fed by stage 1, for the 24 dB slope
+            float w3 = out1 - j2;
+            float w1 = _b1 * j1 + _b2 * w3;
+            float w2 = j2 + _b2 * j1 + _b3 * w3;
+            j1 = Dsp.Ftz(2f * w1 - j1); j2 = Dsp.Ftz(2f * w2 - j2);
+            float out2 = _hp ? (out1 - K2 * w1 - w2) : w2;  // 24 dB/oct
 
-            v0 = r; v3 = v0 - _ic2R;
-            v1 = _a1 * _ic1R + _a2 * v3;
-            v2 = _ic2R + _a2 * _ic1R + _a3 * v3;
-            _ic1R = Dsp.Ftz(2f * v1 - _ic1R); _ic2R = Dsp.Ftz(2f * v2 - _ic2R);
-            float lpR = v2, hpR = v0 - _k * v1 - v2;
-            r = lpR + (hpR - lpR) * mode;
+            return out1 + (out2 - out1) * mode;             // slope crossfade
         }
         public bool IsRinging => false;
+        public void SetMusicalContext(int key, int scale) { }
     }
 
     // ── RingMod ─ char: carrier fine tune · mode: ring-mod → AM ─────────────
@@ -379,6 +409,7 @@ namespace PedalDrumMatrix
             r = (1f - w) * r + w * (r * carrier);
         }
         public bool IsRinging => false;
+        public void SetMusicalContext(int key, int scale) { }
     }
 
     // ── Comb ─ char: feedback damping · mode: +feedback → −feedback (rings) ──
@@ -413,6 +444,7 @@ namespace PedalDrumMatrix
             _tail.Feed(l, r);
         }
         public bool IsRinging => _tail.Ringing;
+        public void SetMusicalContext(int key, int scale) { }
     }
 
     // ── Stutter ─ char: repeats (2-8) · mode: forward → reverse slice (rings) ─
@@ -466,6 +498,7 @@ namespace PedalDrumMatrix
             _tail.Feed(amount * sl, amount * sr2);
         }
         public bool IsRinging => _tail.Ringing;
+        public void SetMusicalContext(int key, int scale) { }
     }
 
     // ── Delay ─ char: feedback · mode: mono → ping-pong (rings). amount = mix ─
@@ -499,6 +532,7 @@ namespace PedalDrumMatrix
             _tail.Feed(wet * dl, wet * dr);
         }
         public bool IsRinging => _tail.Ringing;
+        public void SetMusicalContext(int key, int scale) { }
     }
 
     // ── Reverb ─ char: damping · mode: normal → bright tilt (rings) ─────────
@@ -584,6 +618,7 @@ namespace PedalDrumMatrix
             _tail.Feed(amount * wlo, amount * wro);
         }
         public bool IsRinging => _tail.Ringing;
+        public void SetMusicalContext(int key, int scale) { }
     }
 
     // ── Gate ─ char: duty cycle · mode: straight → triplet timing (tail-free) ─
@@ -611,6 +646,7 @@ namespace PedalDrumMatrix
             l *= g; r *= g;
         }
         public bool IsRinging => false;
+        public void SetMusicalContext(int key, int scale) { }
     }
 
     // ── Resonator ─ char: pitch (snapped to Key/Scale) · mode: short→long decay
