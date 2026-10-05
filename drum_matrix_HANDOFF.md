@@ -1,4 +1,4 @@
-# Pedal Drum Matrix — Handoff (v1.3.5)
+# Pedal Drum Matrix — Handoff (v1.3.6)
 
 A drum-centric multi-effect machine for ReBuzz, tailored to a Behringer BCR2000
 (6 dual-function rotary+push encoders). It replaces a former rig of ~15 machines
@@ -118,7 +118,7 @@ false) only when nothing is ringing — `AnyTailRinging()` OR `_feedback.IsRingi
 ## 6. Effect palette
 
 `FxType` enum (index = preset contract, append only):
-`None=0, Bitcrush, Drive, Lowpass, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator(=10), Highpass(=11)`.
+`None=0, Bitcrush, Drive, Lowpass, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator(=10), Highpass(=11), Transient(=12), Wavefolder(=13), Phaser(=14), SubOctave(=15), Formant(=16)`.
 (Lowpass keeps value 3 — the former `Filter` — so old lowpass-mode instances are
 bit-identical; Highpass is appended at 11.)
 
@@ -131,6 +131,23 @@ Char (the rotary character), and Mode (the switch). Meanings:
   state-variable filter (LP/HP fixed at construction). Amount blends dry ->
   filtered (how much filter is applied); Char sets cutoff (150 Hz -> 18 kHz);
   Mode selects one of two Q values (0.707 gentle / 6.0 resonant), crossfaded.
+- **Transient** — differential-envelope transient designer. Amount: intensity.
+  Char: attack (sharpen) <-> sustain (fatten), neutral at centre. Mode: fast /
+  slow detector. Stereo-linked detector; tail-free.
+- **Wavefolder** — sine wavefolder (bright inharmonic partials, unlike Drive's
+  clipping). Amount: drive into the fold. Char: fold density (brightness). Mode:
+  symmetric / asymmetric (bias -> even harmonics). Fold brightness rises with
+  input level and the output follows the input envelope, so louder hits fold
+  brighter and quiet tails stay clean (bell/FM-like, level-matched). Tail-free.
+- **Phaser** — up to 8 cascaded first-order allpasses with feedback, mixed with
+  dry. Amount: depth/mix. Char: sweep position (the allpass frequency; drive it
+  with the LFO/envelope). Mode: 4 / 8 stages. Tail-free.
+- **SubOctave** — flip-flop octave divider (square from rising zero-crossings of
+  the lowpassed mono input, envelope-followed, tone-shaped, mixed under dry).
+  Amount: sub level. Char: sub tone. Mode: -1 / -2 octaves. Best on mono hits.
+- **Formant** — three band-pass resonators at vowel formants, summed. Amount:
+  mix. Char: vowel morph A-E-I-O-U. Mode: dark / bright tilt. Sweep Char with the
+  LFO for a talking filter.
 - **RingMod** — Char: carrier fine tune (+/-1 oct). Mode: ring mod -> AM.
   Amount sets carrier 30 Hz to 3 kHz.
 - **Comb** — Char: feedback damping. Mode: +feedback -> -feedback (passes
@@ -384,6 +401,13 @@ named state per effect (`Lowpass`/`Highpass`, etc.).
   that decays toward 0 (delay/comb/reverb/resonator feedback, filter states,
   envelope/AutoGain detectors, Tail level) must be flushed via `Dsp.Ftz` or a
   threshold-to-zero. Turning Amounts DOWN must reduce CPU, never raise it.
+- Effect output levels are calibrated to sit near unity power (measured on
+  broadband noise): full-wet/blended effects carry a fixed makeup constant
+  (Formant x3.5, Phaser x0.87) and the SubOctave sub is scaled to about +2 dB.
+  The Wavefolder scales its folded output by the input envelope (dynamics-
+  tracking), which both level-matches it and keeps quiet tails clean; makeup 0.75. When adding or retuning an effect, measure RMS gain vs dry and
+  trim so it is roughly level-matched to the others (cheap: one baked constant,
+  no per-slot auto-gain).
 - Control-rate caching: heavy effects recompute coefficients every 16 samples
   via an `_cc` counter; `Reset()` must set `_cc = 0` so a re-activated effect
   recomputes immediately. `Dsp.TanhFast` is for the signal path only (it is an
@@ -477,6 +501,9 @@ both-modes compute cheap), and fast `Sin` for the RingMod/LFO oscillators.
   controls, so the preset bank was migrated (cutoff from the old amount, full
   wet, Q from the old resonance) and existing songs with filter slots need their
   filter controls reset.
+- **v1.3.6** — five new effect types appended (12-16): Transient designer,
+  Wavefolder, Phaser, SubOctave divider, Formant (vowel) filter. Enum/palette
+  append-only; Slot Type MaxValue 11 -> 16. Existing songs/presets unaffected.
 
 ---
 
