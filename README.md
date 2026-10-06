@@ -1,6 +1,6 @@
 # Pedal Drum Matrix
 
-A drum-centric multi-effect for **ReBuzz** (v1.3.6), built around a Behringer
+A drum-centric multi-effect for **ReBuzz** (v1.3.7), built around a Behringer
 BCR2000. A separate Buzz 1503 port is maintained in its own repo.
 
 A single stereo-in / stereo-out drum-fx **rack**: six serial slots,
@@ -57,7 +57,7 @@ The Char + Mode pair per slot is designed for the BCR2000's six dual-function
 | RingMod | carrier fine tune (±1 oct) | ring-mod vs AM |
 | Comb | feedback damping | +/− feedback sign |
 | Stutter | repeats (2–8) | reverse slice |
-| Delay | feedback (mix stays on Amount) | ping-pong |
+| Delay | time (tempo-synced ticks) | Low vs High feedback |
 | Reverb | damping (bright↔dark) | bright tilt |
 | Gate | duty cycle | triplet timing |
 
@@ -96,7 +96,7 @@ Effect notes:
   mode selects one of two Q values (gentle Butterworth vs resonant).
 - RingMod — sine carrier 30 Hz → 3 kHz, wet scales with amount. Tail-free.
 - Comb — short feedback resonator (metallic); amount raises pitch + feedback. Rings.
-- Delay — tempo-synced (≈6 ticks, from `host.MasterInfo.SamplesPerTick`),
+- Delay — tempo-synced; Char sets the time in ticks {1,2,3,4,6,8,12,16,24,32} (from `host.MasterInfo.SamplesPerTick`),
   feedback + mix scale with amount. Rings.
 - Gate — tempo-synced rhythmic gate, 8→1 ticks/cycle, 50% duty. Tail-free.
 - Stutter — tempo-synced beat-repeat: latches a slice and loops it 4× before
@@ -237,7 +237,7 @@ machine awake (pull Feedback down to let it decay).
 
 Hovering a control shows its real current function via `DescribeValue`, read
 live from the slot's Type. A slot's **Char** reads e.g. `Q 2.0` under Filter,
-`Feedback 47%` under Delay, `Repeats 5` under Stutter; its **Mode** reads
+`6 ticks` under Delay, `Repeats 5` under Stutter; its **Mode** reads
 `Lowpass`/`Highpass`, `Ping-pong`/`Mono`, etc. Amount reads as a percentage.
 The static control names stay generic (the per-knob labels are a GUI job); the
 value readout carries the meaning.

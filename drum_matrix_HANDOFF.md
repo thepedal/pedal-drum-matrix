@@ -1,4 +1,4 @@
-# Pedal Drum Matrix — Handoff (v1.3.6)
+# Pedal Drum Matrix — Handoff (v1.3.7)
 
 A drum-centric multi-effect machine for ReBuzz, tailored to a Behringer BCR2000
 (6 dual-function rotary+push encoders). It replaces a former rig of ~15 machines
@@ -154,7 +154,10 @@ Char (the rotary character), and Mode (the switch). Meanings:
   through zero at the midpoint, which is what makes the flip click-free).
 - **Stutter** — Char: repeats (2 to 8). Mode: forward -> reverse slice.
   Beat-repeat latched ~1 tick.
-- **Delay** — Char: feedback. Mode: mono -> ping-pong. Amount = mix, ~6 ticks.
+- **Delay** — Char: delay time, stepped through tempo-synced tick values
+  {1,2,3,4,6,8,12,16,24,32}; the machine converts Char->ticks x spt per block and
+  pushes it to the active DelayFx (via `is DelayFx` cast), so it tracks tempo.
+  Mode: Low vs High feedback (0.25 / 0.75). Amount = mix. No ping-pong.
 - **Reverb** — Char: damping. Mode: normal -> bright tilt. Freeverb 8 comb + 4
   allpass.
 - **Gate** — Char: duty cycle. Mode: straight -> triplet timing. Tempo-synced.
@@ -506,6 +509,16 @@ both-modes compute cheap), and fast `Sin` for the RingMod/LFO oscillators.
   append-only; Slot Type MaxValue 11 -> 16. Existing songs/presets unaffected.
 
 ---
+
+- **v1.3.7** — reworked the Delay controls WITHOUT adding a parameter (song
+  loads break on any param-count change in ReBuzz — PedalDrumGrid §12, confirmed
+  on this machine). Char now steps through tempo-synced delay times (ticks),
+  Mode selects Low/High feedback, Amount stays mix; ping-pong dropped. Delay time
+  comes from Char via the machine (Char->ticks x spt, pushed through
+  Slot.SetParams's delaySamples arg to the active DelayFx). Param count unchanged
+  (49), so existing songs still LOAD; but the Delay Char/Mode meanings changed, so
+  delay slots in old songs will sound different and need re-tweaking (same kind of
+  trade as the filter rework). Delay buffer grown 2 s -> 4 s.
 
 - A separate **Buzz 1503 port** (net48/x86) is maintained in its own repo.
 

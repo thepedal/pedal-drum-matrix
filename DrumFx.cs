@@ -495,32 +495,44 @@ namespace PedalDrumMatrix
         public void SetMusicalContext(int key, int scale) { }
     }
 
-    // ── Delay ─ char: feedback · mode: mono → ping-pong (rings). amount = mix ─
+    // ── Delay ─ char: time (tempo-synced ticks) · mode: Low/High feedback ────
+    // amount = mix. Char steps through tick-synced delay lengths (the machine
+    // converts Char→ticks→samples per block so it tracks tempo); Mode picks a
+    // low or high feedback value (number of repeats). No ping-pong.
     public sealed class DelayFx : IDrumFx
     {
+        // Char → delay length in ticks. Stepped across the knob.
+        public static readonly int[] TickVals = { 1, 2, 3, 4, 6, 8, 12, 16, 24, 32 };
+        public static int CharToTicks(float p1)
+        {
+            int i = (int)(p1 * (TickVals.Length - 1) + 0.5f);
+            if (i < 0) i = 0; else if (i >= TickVals.Length) i = TickVals.Length - 1;
+            return TickVals[i];
+        }
+
         float[] _bL, _bR; int _w, _n, _d;
         float _sr = 44100f, _spt = 11025f; Tail _tail;
         public void Prepare(float sr, float spt)
         {
             _sr = sr > 0 ? sr : 44100f;
             _spt = spt > 1f ? spt : _sr / 8f;
-            _n = Math.Max(8, (int)(2.0f * _sr));
+            _n = Math.Max(8, (int)(4.0f * _sr));          // up to ~4 s for long tick syncs
             _bL = new float[_n]; _bR = new float[_n];
             _tail.Prepare(_sr);
-            _d = Math.Min(_n - 1, Math.Max(1, (int)(6f * _spt)));
+            _d = Math.Min(_n - 1, Math.Max(1, (int)(6f * _spt)));   // 6-tick fallback
             Reset();
         }
+        // Delay length in samples, pushed per block by the machine (Char→ticks × spt).
+        public void SetDelaySamples(int s) { _d = s < 1 ? 1 : (s > _n - 1 ? _n - 1 : s); }
         public void Reset() { Array.Clear(_bL,0,_n); Array.Clear(_bR,0,_n); _w=0; _tail.Reset(); }
         public void Process(ref float l, ref float r, float amount, float p1, float mode)
         {
             if (amount <= 0f) { _tail.Reset(); return; }
-            float fb = p1 * 0.95f, wet = amount;
+            float fb = 0.25f + mode * 0.5f, wet = amount;   // Mode: Low(0.25) → High(0.75)
             int rp = _w - _d; if (rp < 0) rp += _n;
             float dl = _bL[rp], dr = _bR[rp];
-            float fbL = dl + (dr - dl) * mode;          // mono → ping-pong (crossed feedback)
-            float fbR = dr + (dl - dr) * mode;
-            _bL[_w] = Dsp.Ftz(l + fb * fbL);
-            _bR[_w] = Dsp.Ftz(r + fb * fbR);
+            _bL[_w] = Dsp.Ftz(l + fb * dl);                 // mono feedback (no ping-pong)
+            _bR[_w] = Dsp.Ftz(r + fb * dr);
             _w++; if (_w >= _n) _w = 0;
             l = l + wet * dl; r = r + wet * dr;
             _tail.Feed(wet * dl, wet * dr);
