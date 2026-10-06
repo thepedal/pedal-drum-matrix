@@ -6,7 +6,7 @@ namespace PedalDrumMatrix
     public enum FxType
     {
         None = 0, Bitcrush, Drive, Lowpass, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator, Highpass,
-        Transient, Wavefolder, Phaser, SubOctave, Formant
+        Transient, Wavefolder, Phaser, SubOctave, Formant, Resampler
     }
 
     // One effect occupying a slot. Stereo, per-sample.
@@ -47,6 +47,7 @@ namespace PedalDrumMatrix
             FxType.Phaser    => new PhaserFx(),
             FxType.SubOctave => new SubOctaveFx(),
             FxType.Formant   => new FormantFx(),
+            FxType.Resampler => new ResamplerFx(),
             _ => new NoneFx()
         };
     }
@@ -973,6 +974,36 @@ namespace PedalDrumMatrix
                 wet += bp * _gain[b];
             }
             return x + (wet - x) * amount;                          // dry → vowel (mix)
+        }
+        public bool IsRinging => false;
+        public void SetMusicalContext(int key, int scale) { }
+    }
+
+    // ── Resampler ─ char: sample rate (full → very low) · mode: bits (full/8) ─
+    // Classic decimator/downsampler: Char lowers the effective sample rate via
+    // sample-and-hold (full rate → ~1/100), Mode crossfades to 8-bit depth,
+    // Amount blends dry → resampled. Separate, explicit lo-fi vs Bitcrush's tilt.
+    public sealed class ResamplerFx : IDrumFx
+    {
+        float _holdL, _holdR, _phase;
+        public void Prepare(float sr, float spt) { Reset(); }
+        public void Reset() { _holdL = _holdR = 0f; _phase = 1f; }
+        public void Process(ref float l, ref float r, float amount, float p1, float mode)
+        {
+            if (amount <= 0f) return;
+            float step = 1f - p1 * 0.99f;                 // Char: full rate (1) → ~1/100
+            if (step < 0.008f) step = 0.008f;
+            _phase += step;
+            if (_phase >= 1f) { _phase -= 1f; _holdL = l; _holdR = r; }   // sample & hold
+
+            float xl = _holdL, xr = _holdR;
+            float ql = MathF.Round(xl * 128f) * (1f / 128f);   // 8-bit (256 levels)
+            float qr = MathF.Round(xr * 128f) * (1f / 128f);
+            xl += (ql - xl) * mode;                        // crossfade full → 8-bit
+            xr += (qr - xr) * mode;
+
+            l += (xl - l) * amount;                        // dry → resampled (mix)
+            r += (xr - r) * amount;
         }
         public bool IsRinging => false;
         public void SetMusicalContext(int key, int scale) { }

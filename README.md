@@ -1,6 +1,6 @@
 # Pedal Drum Matrix
 
-A drum-centric multi-effect for **ReBuzz** (v1.3.7), built around a Behringer
+A drum-centric multi-effect for **ReBuzz** (v1.3.8), built around a Behringer
 BCR2000. A separate Buzz 1503 port is maintained in its own repo.
 
 A single stereo-in / stereo-out drum-fx **rack**: six serial slots,
@@ -54,6 +54,7 @@ The Char + Mode pair per slot is designed for the BCR2000's six dual-function
 | Phaser | sweep position | 4 vs 8 stages |
 | SubOctave | sub tone | -1 vs -2 octaves |
 | Formant | vowel (A-E-I-O-U) | dark vs bright |
+| Resampler | sample rate | full vs 8-bit |
 | RingMod | carrier fine tune (±1 oct) | ring-mod vs AM |
 | Comb | feedback damping | +/− feedback sign |
 | Stutter | repeats (2–8) | reverse slice |

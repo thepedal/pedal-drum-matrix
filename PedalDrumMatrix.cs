@@ -15,7 +15,7 @@ namespace PedalDrumMatrix
                  Author = "thepedal", MaxTracks = 0)]
     public class PedalDrumMatrixMachine : IBuzzMachine
     {
-        internal const string Version = "1.3.7";
+        internal const string Version = "1.3.8";
         const int SLOTS = 6;
 
         // Right-click "About..." entry in the Machine View context menu.
@@ -177,43 +177,43 @@ namespace PedalDrumMatrix
         // inline per attribute (a static-field reference won't compile) and its
         // order must match the FxType enum.
 
-        [ParameterDecl(MinValue = 0, MaxValue = 16, DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant" },
+        [ParameterDecl(MinValue = 0, MaxValue = 17, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant","Resampler" },
             Description = "Slot 1 - effect type")]
         public int Slot1Type { get; set; } = 0;
         [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 1 - amount")]
         public int Slot1Amount { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 16, DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant" },
+        [ParameterDecl(MinValue = 0, MaxValue = 17, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant","Resampler" },
             Description = "Slot 2 - effect type")]
         public int Slot2Type { get; set; } = 0;
         [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 2 - amount")]
         public int Slot2Amount { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 16, DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant" },
+        [ParameterDecl(MinValue = 0, MaxValue = 17, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant","Resampler" },
             Description = "Slot 3 - effect type")]
         public int Slot3Type { get; set; } = 0;
         [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 3 - amount")]
         public int Slot3Amount { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 16, DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant" },
+        [ParameterDecl(MinValue = 0, MaxValue = 17, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant","Resampler" },
             Description = "Slot 4 - effect type")]
         public int Slot4Type { get; set; } = 0;
         [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 4 - amount")]
         public int Slot4Amount { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 16, DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant" },
+        [ParameterDecl(MinValue = 0, MaxValue = 17, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant","Resampler" },
             Description = "Slot 5 - effect type")]
         public int Slot5Type { get; set; } = 0;
         [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 5 - amount")]
         public int Slot5Amount { get; set; } = 0;
 
-        [ParameterDecl(MinValue = 0, MaxValue = 16, DefValue = 0, ValueDescriptions = new[] {
-            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant" },
+        [ParameterDecl(MinValue = 0, MaxValue = 17, DefValue = 0, ValueDescriptions = new[] {
+            "None","Bitcrush","Drive","Lowpass","RingMod","Comb","Stutter","Delay","Reverb","Gate","Resonator","Highpass","Transient","Wavefolder","Phaser","SubOctave","Formant","Resampler" },
             Description = "Slot 6 - effect type")]
         public int Slot6Type { get; set; } = 0;
         [ParameterDecl(MinValue = 0, MaxValue = 127, DefValue = 0, Description = "Slot 6 - amount")]
@@ -480,7 +480,9 @@ namespace PedalDrumMatrix
             {
                 FxType t = (FxType)SlotTypeOf(n[4] - '0');
                 if (n.EndsWith("Amount")) return Pct(value);
-                if (n.EndsWith("Char"))   return t == FxType.Resonator ? NoteName(value) : CharLabel(t, value);
+                if (n.EndsWith("Char"))   return t == FxType.Resonator ? NoteName(value)
+                                               : t == FxType.Resampler ? ResamplerRate(value)
+                                               : CharLabel(t, value);
                 if (n.EndsWith("Mode"))     return ModeLabel(t, value != 0);
                 if (n.EndsWith("Depth"))    return SignedPct(value);
             }
@@ -505,6 +507,13 @@ namespace PedalDrumMatrix
             float freq = ResonatorFx.CharToFreq(Key, Scale, charValue / 127f);
             int midi = (int)MathF.Round(69f + 12f * MathF.Log2(freq / 440f));
             return NoteNames[((midi % 12) + 12) % 12] + (midi / 12 - 1).ToString(Inv);
+        }
+
+        // Resampler Char readout — effective rate relative to the real project SR.
+        string ResamplerRate(int charValue)
+        {
+            float sr = _sampleRate > 0f ? _sampleRate : 44100f;
+            return FormatHz(sr * (1f - (charValue / 127f) * 0.99f));
         }
 
         static string FormatMs(float ms)
@@ -558,6 +567,7 @@ namespace PedalDrumMatrix
                 case FxType.Phaser:    return on ? "8 stages"    : "4 stages";
                 case FxType.SubOctave: return on ? "-2 oct"      : "-1 oct";
                 case FxType.Formant:   return on ? "Bright"      : "Dark";
+                case FxType.Resampler: return on ? "8-bit"       : "Full bits";
                 default:              return "-";
             }
         }

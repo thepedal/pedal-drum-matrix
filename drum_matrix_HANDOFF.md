@@ -1,4 +1,4 @@
-# Pedal Drum Matrix — Handoff (v1.3.7)
+# Pedal Drum Matrix — Handoff (v1.3.8)
 
 A drum-centric multi-effect machine for ReBuzz, tailored to a Behringer BCR2000
 (6 dual-function rotary+push encoders). It replaces a former rig of ~15 machines
@@ -118,7 +118,7 @@ false) only when nothing is ringing — `AnyTailRinging()` OR `_feedback.IsRingi
 ## 6. Effect palette
 
 `FxType` enum (index = preset contract, append only):
-`None=0, Bitcrush, Drive, Lowpass, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator(=10), Highpass(=11), Transient(=12), Wavefolder(=13), Phaser(=14), SubOctave(=15), Formant(=16)`.
+`None=0, Bitcrush, Drive, Lowpass, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator(=10), Highpass(=11), Transient(=12), Wavefolder(=13), Phaser(=14), SubOctave(=15), Formant(=16), Resampler(=17)`.
 (Lowpass keeps value 3 — the former `Filter` — so old lowpass-mode instances are
 bit-identical; Highpass is appended at 11.)
 
@@ -148,6 +148,9 @@ Char (the rotary character), and Mode (the switch). Meanings:
 - **Formant** — three band-pass resonators at vowel formants, summed. Amount:
   mix. Char: vowel morph A-E-I-O-U. Mode: dark / bright tilt. Sweep Char with the
   LFO for a talking filter.
+- **Resampler** — decimator/downsampler. Char: effective sample rate, full down
+  to ~1/100 (sample-and-hold). Mode: bit depth, full vs 8-bit (crossfaded).
+  Amount: dry -> resampled mix. Dedicated, explicit lo-fi vs Bitcrush's tilt.
 - **RingMod** — Char: carrier fine tune (+/-1 oct). Mode: ring mod -> AM.
   Amount sets carrier 30 Hz to 3 kHz.
 - **Comb** — Char: feedback damping. Mode: +feedback -> -feedback (passes
@@ -519,6 +522,11 @@ both-modes compute cheap), and fast `Sin` for the RingMod/LFO oscillators.
   (49), so existing songs still LOAD; but the Delay Char/Mode meanings changed, so
   delay slots in old songs will sound different and need re-tweaking (same kind of
   trade as the filter rework). Delay buffer grown 2 s -> 4 s.
+
+- **v1.3.8** — new effect type Resampler (appended, value 17): Char = effective
+  sample rate (full -> ~1/100 via sample-and-hold), Mode = full/8-bit, Amount =
+  mix. Enum/palette append-only, Slot Type MaxValue 16 -> 17; no new parameter, so
+  the param count stays 49 and existing songs load unchanged.
 
 - A separate **Buzz 1503 port** (net48/x86) is maintained in its own repo.
 
