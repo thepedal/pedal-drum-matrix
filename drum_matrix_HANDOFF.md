@@ -1,4 +1,4 @@
-# Pedal Drum Matrix — Handoff (v1.3.8)
+# Pedal Drum Matrix — Handoff (v1.3.9)
 
 A drum-centric multi-effect machine for ReBuzz, tailored to a Behringer BCR2000
 (6 dual-function rotary+push encoders). It replaces a former rig of ~15 machines
@@ -118,7 +118,7 @@ false) only when nothing is ringing — `AnyTailRinging()` OR `_feedback.IsRingi
 ## 6. Effect palette
 
 `FxType` enum (index = preset contract, append only):
-`None=0, Bitcrush, Drive, Lowpass, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator(=10), Highpass(=11), Transient(=12), Wavefolder(=13), Phaser(=14), SubOctave(=15), Formant(=16), Resampler(=17)`.
+`None=0, Bitcrush, Drive, Lowpass, RingMod, Comb, Stutter, Delay, Reverb, Gate, Resonator(=10), Highpass(=11), Transient(=12), Wavefolder(=13), Phaser(=14), SubOctave(=15), Formant(=16), Resampler(=17), Chorus(=18), Freeze(=19), AutoWah(=20), Exciter(=21)`.
 (Lowpass keeps value 3 — the former `Filter` — so old lowpass-mode instances are
 bit-identical; Highpass is appended at 11.)
 
@@ -151,6 +151,23 @@ Char (the rotary character), and Mode (the switch). Meanings:
 - **Resampler** — decimator/downsampler. Char: effective sample rate, full down
   to ~1/100 (sample-and-hold). Mode: bit depth, full vs 8-bit (crossfaded).
   Amount: dry -> resampled mix. Dedicated, explicit lo-fi vs Bitcrush's tilt.
+- **Chorus / Ensemble** — two short LFO-modulated delay voices (stereo-opposed),
+  summed with dry. Char: tempo-synced modulation rate as a division in ticks/cycle
+  (DelayFx.TickVals {1,2,3,4,6,8,12,16,24,32}); the machine pushes samples-per-tick
+  to the chorus per block (Slot.SetParams spt arg -> ChorusFx.SetSpt) so it tracks
+  tempo. Mode: chorus (longer, no fb) vs flanger (short line + feedback sweep).
+  Amount: mix.
+- **Freeze / Granular hold** — captures a short slice and loops it (raised-cosine
+  windowed) into a sustained pad under the dry. Char: grain size (30-380 ms).
+  Mode: one-shot (transient-triggered capture, so a hit freezes into a grain) vs
+  continuous (re-capture each wrap, a smear). Rings (tail-tracked).
+- **Auto-wah / Envelope filter** — resonant band-pass whose cutoff tracks the
+  input envelope (reuses the SVF + an env follower). Char: sensitivity/sweep
+  range. Mode: up vs down sweep. Amount: mix.
+- **Exciter / Enhancer** — high-passes, generates harmonics on that high band,
+  adds them back for air/presence (band-limited, unlike Drive). Char: band start
+  freq. Mode: tube (soft, even) vs bright (tanh). Amount: drive. Add scaled 0.22
+  for level match (~+2 dB, enhancer-appropriate).
 - **RingMod** — Char: carrier fine tune (+/-1 oct). Mode: ring mod -> AM.
   Amount sets carrier 30 Hz to 3 kHz.
 - **Comb** — Char: feedback damping. Mode: +feedback -> -feedback (passes
@@ -527,6 +544,14 @@ both-modes compute cheap), and fast `Sin` for the RingMod/LFO oscillators.
   sample rate (full -> ~1/100 via sample-and-hold), Mode = full/8-bit, Amount =
   mix. Enum/palette append-only, Slot Type MaxValue 16 -> 17; no new parameter, so
   the param count stays 49 and existing songs load unchanged.
+
+- **v1.3.9** — four new effect types appended (18-21): Chorus/Ensemble, Freeze
+  (granular hold, transient-triggered one-shot), Auto-wah (envelope filter),
+  Exciter. Enum/palette append-only; Slot Type MaxValue 17 -> 21; no new
+  parameter, so param count stays 49 and existing songs load unchanged. Exciter
+  level-matched (add x0.22); Freeze windowed + wrap-safe. Freeze Char later
+  reversed (380->30 ms as it turns up). Chorus rate is tempo-synced (Char =
+  ticks/cycle division, spt pushed per block), matching the Delay/Auto-wah sync.
 
 - A separate **Buzz 1503 port** (net48/x86) is maintained in its own repo.
 
