@@ -1,4 +1,4 @@
-# Pedal Drum Matrix — Handoff (v1.3.9)
+# Pedal Drum Matrix — Handoff (v1.4.0)
 
 A drum-centric multi-effect machine for ReBuzz, tailored to a Behringer BCR2000
 (6 dual-function rotary+push encoders). It replaces a former rig of ~15 machines
@@ -553,12 +553,25 @@ both-modes compute cheap), and fast `Sin` for the RingMod/LFO oscillators.
   reversed (380->30 ms as it turns up). Chorus rate is tempo-synced (Char =
   ticks/cycle division, spt pushed per block), matching the Delay/Auto-wah sync.
 
+- **v1.4.0** — embedded read-out GUI at the top of the parameter window
+  (`ReadoutGui.cs`): an IMachineGUIFactory (Core §26) returning a FrameworkElement
+  that OnRender-paints a live rack view — one row per slot (Type / Amount / Char /
+  Mode) plus a globals footer (Feedback, Morph, Limiter, AutoGain). Labels come
+  from the machine's own DescribeValue so they always match the rack; values read
+  via cached property-getter delegates (atomic int reads); 10 Hz DispatcherTimer
+  repaints only on change. Mirrors the Buzz 1503 port's ReadoutGui. No parameter
+  or DSP change — param count stays 49, songs load unchanged.
+
 - A separate **Buzz 1503 port** (net48/x86) is maintained in its own repo.
 
 ## 17. Roadmap / declined
 
-- **GUI: declined by the user.** Control is via mapped BCR2000 encoders and the
-  parameter window; `DescribeValue` carries the readouts.
+- **GUI: added in v1.4.0** (was previously declined). An embedded, display-only
+  read-out panel (`ReadoutGui.cs`, §26 pattern) sits at the top of the parameter
+  window; control is still via mapped BCR2000 encoders and the sliders. The panel
+  is read-only — it does not write parameters (so the PedalTracker §13.1
+  direct-write trap does not apply); if a future version adds interactive controls
+  there, route writes through IParameter.SetValue, never the property.
 - The machine is feature-complete for v1.3. Future direction is driven by
   real-world playing feedback rather than a fixed backlog.
 - If a future feature wants another mod source, the slot's source-agnostic Char

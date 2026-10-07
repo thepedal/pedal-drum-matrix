@@ -15,7 +15,7 @@ namespace PedalDrumMatrix
                  Author = "thepedal", MaxTracks = 0)]
     public class PedalDrumMatrixMachine : IBuzzMachine
     {
-        internal const string Version = "1.3.9";
+        internal const string Version = "1.4.0";
         const int SLOTS = 6;
 
         // Right-click "About..." entry in the Machine View context menu.
